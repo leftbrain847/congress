@@ -85,3 +85,16 @@ def test_pap_conflicting_duplicates_left_untagged():
 def test_pap_rejects_unexpected_header():
     with pytest.raises(ValueError):
         pap.parse("a,b,c\r\n1,2,3\r\n", KNOWN)
+
+
+def test_h2h_by_topic_sql(tiny_data):
+    con = queries.connect(tiny_data)
+    # A vs B: shared rolls 1, 2, 3, 5, 6. PAP: roll 1 coded 1 (Macroeconomics), roll 2 "NA", the rest not in the file.
+    rows = {r["topic"]: r for r in queries.run(con, "h2h_by_topic", 1, 2, "Senate", CONGRESS, CONGRESS, 0.10, "pap")}
+    assert set(rows) == {"1", ""}
+    assert (rows["1"]["shared_all"], rows["1"]["agree_all"]) == (1, 1)
+    assert (rows[""]["shared_all"], rows[""]["agree_all"], rows[""]["shared_contested"], rows[""]["agree_contested"]) == (4, 3, 2, 1)
+    # CRS: S10 covers rolls 1, 2 (inherited) and 6 (inherited); rolls 3 and 5 have none.
+    rows = {r["topic"]: r for r in queries.run(con, "h2h_by_topic", 1, 2, "Senate", CONGRESS, CONGRESS, 0.10, "crs")}
+    assert (rows["Taxation"]["shared_all"], rows["Taxation"]["agree_all"]) == (3, 2)
+    assert rows[""]["shared_all"] == 2

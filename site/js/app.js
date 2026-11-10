@@ -1,9 +1,10 @@
-// congress front end. Engine-agnostic: the live site passes the DuckDB-WASM engine, the day snapshot passes the
-// precomputed one. Every number on screen comes from engine.query(name, params, needs) with SQL in site/sql/.
+// congress front end. Every per-roll-call number arrives precomputed (pipeline/results.py, from site/sql). The browser
+// only aggregates the pair a visitor picks (site/js/compute.js). The live site fetches result files per Congress; the
+// day snapshot embeds them.
 // Builds DOM with createElement/textContent only (no innerHTML with data).
 (function (root) {
   const CG = (root.CG = root.CG || {});
-  const M = CG.metrics;
+  const M = CG.metrics, K = CG.compute;
 
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -25,7 +26,7 @@
     return el;
   }
 
-  let engine, settings, manifest, view;
+  let data, settings, manifest, view;
 
   function ordinal(n) {
     const v = n % 100, suf = ['th', 'st', 'nd', 'rd'];
@@ -76,15 +77,12 @@
     return h('div', { class: 'notice' }, text);
   }
 
-  async function run(name, params, needs) {
-    try {
-      return await engine.query(name, params, needs);
-    } catch (e) {
-      if (e && e.code === 'not_in_snapshot') throw e;
-      console.warn(e);
-      throw e;
-    }
+  function topicName(scheme, topic) {
+    if (!topic) return 'Not coded';
+    return scheme === 'pap' ? (settings.topics.pap_major_topics[topic] || `Code ${topic}`) : topic;
   }
+
+  const pctCell = (agree, n, minN) => (n >= minN ? M.formatPct(agree / n) : '—');
 
   // ---------- Home ----------
   async function home() {
@@ -92,28 +90,30 @@
     const okC = hasPartition(ch, c) ? c : partitionsFor(ch).slice(-1)[0];
     return [
       h('h1', {}, 'Roll-call voting in the U.S. House and Senate'),
-      h('p', { class: 'lede' }, 'Who votes with whom, on what, and how each vote split. Every number is computed in your browser from Voteview roll-call records; each one is shown with its definition and its count.'),
+      h('p', { class: 'lede' }, 'Who votes with whom, on what, and how each vote split. Results are computed ahead of time from Voteview roll-call records; your browser only adds up the pair you pick. Every number is shown with its definition and its count.'),
       h('div', { class: 'cards' },
-        h('a', { class: 'card', href: `#/h2h/${ch}/${okC}` }, h('strong', {}, 'Head-to-head'), h('span', {}, 'Agreement between any two members who served together, on contested votes and on all votes.')),
+        h('a', { class: 'card', href: `#/h2h/${ch}/${okC}` }, h('strong', {}, 'Head-to-head'), h('span', {}, 'Agreement between any two members who served together: on contested votes, on all votes, and by topic.')),
         h('a', { class: 'card', href: `#/votes/${ch}/${okC}` }, h('strong', {}, 'Roll calls'), h('span', {}, 'Every roll call in a Congress: the split by party, who crossed party lines, and the NOMINATE cutting line.')),
         h('a', { class: 'card', href: '#/about' }, h('strong', {}, 'Definitions and sources'), h('span', {}, 'How each metric is computed, what the data covers, and what is still untagged.'))),
-      h('p', { class: 'muted' }, `Data: ${manifest.partitions.length} chamber-Congresses loaded from the manifest.`),
+      h('p', { class: 'muted' }, `Data: ${manifest.partitions.length} chamber-Congresses.`),
     ];
   }
 
   // ---------- Head-to-head ----------
   async function headToHead(chamber, congress, q) {
     const out = [h('h1', {}, 'Head-to-head'), pickers(chamber, congress, (c, n) => `#/h2h/${c}/${n}`)];
-    const members = await run('members', [chamber, congress], [[chamber, congress]]);
+    const members = await data.members(chamber, congress);
     const a = Number(q.get('a')) || null, b = Number(q.get('b')) || null;
-    const route = (na, nb, scope) => {
+    const scope = q.get('scope') === 'congress' ? 'congress' : 'all';
+    const scheme = ['pap', 'crs'].includes(q.get('topic')) ? q.get('topic') : settings.analysis.topic_scheme;
+    const route = (na, nb, sc = scope, tp = scheme) => {
       const p = new URLSearchParams();
       if (na) p.set('a', na);
       if (nb) p.set('b', nb);
-      if (scope) p.set('scope', scope);
+      p.set('scope', sc);
+      p.set('topic', tp);
       return `#/h2h/${chamber}/${congress}?${p}`;
     };
-    const scope = q.get('scope') === 'congress' ? 'congress' : 'all';
     const sel = (label, value, onPick) => h('label', {}, label, h('select', { onchange: (e) => onPick(Number(e.target.value) || null) },
       h('option', { value: '' }, 'Pick a member…'),
       members.map((m) => h('option', { value: m.icpsr, selected: m.icpsr === value }, memberLabel({ ...m, chamber })))));
@@ -124,15 +124,20 @@
     if (!(a && b)) return [...out, h('p', { class: 'muted' }, 'Pick two members of this chamber and Congress.')];
     if (a === b) return [...out, notice('Pick two different members.')];
 
-    const shared = (await run('shared_congresses', [a, b, chamber], [])).map((r) => Number(r.congress));
+    const [rowsA, rowsB] = await Promise.all([data.member(a), data.member(b)]);
+    const shared = K.sharedCongresses(rowsA, rowsB, chamber);
     const span = scope === 'congress' ? [congress] : shared.filter((c) => hasPartition(chamber, c));
     const missing = scope === 'all' ? shared.filter((c) => !hasPartition(chamber, c)) : [];
     out.push(h('div', { class: 'seg', role: 'group', 'aria-label': 'Congresses counted' },
       h('a', { href: route(a, b, 'all'), class: scope === 'all' ? 'on' : '' }, `All Congresses together (${shared.length})`),
       h('a', { href: route(a, b, 'congress'), class: scope === 'congress' ? 'on' : '' }, `${ordinal(congress)} only`)));
     const t = settings.analysis.contested_threshold, minN = settings.analysis.min_shared_votes;
-    const rows = span.length ? await run('h2h', [a, b, chamber, Math.min(...span), Math.max(...span), t], span.map((c) => [chamber, c])) : [];
-    const used = rows.filter((r) => span.includes(Number(r.congress)));
+    const parts = await Promise.all(span.map(async (c) => {
+      const [rc, positions] = await Promise.all([data.rollcalls(chamber, c), data.positions(chamber, c)]);
+      return { congress: c, rows: rc.rows, positions };
+    }));
+    const res = K.pairAgreement(parts, a, b, t, scheme);
+    const used = res.byCongress;
     const sum = M.summarizeH2h(used, minN);
     const names = [a, b].map((id) => members.find((m) => m.icpsr === id));
 
@@ -158,6 +163,21 @@
             h('td', {}, one.all_shown ? M.formatPct(one.pct_all) : '—'), h('td', {}, M.formatInt(r.shared_all)));
         }))) : h('p', { class: 'muted' }, 'No shared yea/nay votes in the selected Congresses.'),
       h('p', { class: 'muted' }, `Cells with n below ${minN} show —.`),
+      h('h2', {}, 'By topic'),
+      h('div', { class: 'seg', role: 'group', 'aria-label': 'Topic scheme' },
+        h('a', { href: route(a, b, scope, 'pap'), class: scheme === 'pap' ? 'on' : '' }, 'Policy Agendas topics'),
+        h('a', { href: route(a, b, scope, 'crs'), class: scheme === 'crs' ? 'on' : '' }, 'CRS policy areas')),
+      definition(scheme === 'pap'
+        ? 'Policy Agendas Project major topic of each roll call (coded for the 79th–118th Congresses, 1945–2024).'
+        : 'Congressional Research Service policy area of the bill (93rd Congress, 1973, onward). Amendments and procedural votes take their bill\'s area.'),
+      res.byTopic.length ? table(
+        h('thead', {}, h('tr', {}, h('th', {}, 'Topic'), h('th', {}, 'Contested'), h('th', {}, 'n'), h('th', {}, 'All'), h('th', {}, 'n'))),
+        h('tbody', {}, res.byTopic.slice().sort((x, y) => y.shared_all - x.shared_all).map((r) => h('tr', {},
+          h('td', {}, topicName(scheme, r.topic)),
+          h('td', {}, pctCell(r.agree_contested, r.shared_contested, minN)), h('td', {}, M.formatInt(r.shared_contested)),
+          h('td', {}, pctCell(r.agree_all, r.shared_all, minN)), h('td', {}, M.formatInt(r.shared_all))))))
+        : h('p', { class: 'muted' }, 'No shared votes to split.'),
+      h('p', { class: 'muted' }, `Sorted by shared votes. Cells with n below ${minN} show —.`),
       h('p', {}, link(`#/member/${a}`, `${names[0] ? names[0].bioname : a}: member page`), ' · ', link(`#/member/${b}`, `${names[1] ? names[1].bioname : b}: member page`))));
     return out;
   }
@@ -165,7 +185,7 @@
   // ---------- Roll-call list ----------
   async function rollcallList(chamber, congress, q) {
     const out = [h('h1', {}, 'Roll calls'), pickers(chamber, congress, (c, n) => `#/votes/${c}/${n}`)];
-    const rows = await run('rollcalls', [chamber, congress], [[chamber, congress]]);
+    const rows = (await data.rollcalls(chamber, congress)).rows;
     const filter = (q.get('q') || '').toLowerCase();
     const shown = filter ? rows.filter((r) => [r.bill_number, r.vote_question, r.description, r.crs_policy_area_resolved].join(' ').toLowerCase().includes(filter)) : rows;
     const limit = Number(q.get('n')) || 100;
@@ -215,12 +235,13 @@
   }
 
   async function billView(chamber, congress, roll) {
-    const needs = [[chamber, congress]];
-    const [rc] = await run('rollcall', [chamber, congress, roll], needs);
+    const [file, members, positions] = await Promise.all([data.rollcalls(chamber, congress), data.members(chamber, congress), data.positions(chamber, congress)]);
+    const rc = file.rows.find((r) => r.rollnumber === roll);
     if (!rc) return [h('h1', {}, 'Roll call not found'), link(`#/votes/${chamber}/${congress}`, 'Back to the list')];
-    const [split, crossers, points] = await Promise.all([
-      run('bill_party_split', [chamber, congress, roll], needs), run('bill_crossers', [chamber, congress, roll], needs),
-      run('bill_points', [chamber, congress, roll], needs)]);
+    const byId = new Map(members.map((m) => [m.icpsr, m]));
+    const split = (file.split[String(roll)] || []).map(([party, yea, nay, not_voting]) => ({ party, yea, nay, not_voting }));
+    const crossers = (file.crossers[String(roll)] || []).map(([icpsr, position]) => ({ ...byId.get(icpsr), icpsr, position }));
+    const points = K.points(members, positions, roll);
     const total = (r) => r.yea + r.nay + r.not_voting;
     const t = settings.analysis.contested_threshold;
     const contested = rc.minority_share != null && rc.minority_share >= t;
@@ -228,7 +249,7 @@
       h('p', { class: 'crumb' }, link(`#/votes/${chamber}/${congress}`, `← ${chamber}, ${ordinal(congress)} Congress`)),
       h('h1', {}, `${rc.bill_number ? rc.bill_number + ': ' : ''}${rc.vote_question || 'Roll call ' + roll}`),
       h('p', { class: 'muted' }, `${chamber} roll call ${roll} · ${rc.date || 'date unknown'}${rc.vote_result ? ' · Result: ' + rc.vote_result : ''}`),
-      rc.vote_desc || rc.dtl_desc ? h('p', {}, rc.vote_desc || rc.dtl_desc) : null,
+      rc.description ? h('p', {}, rc.description) : null,
       h('p', { class: 'muted' }, topicLine(rc)),
       h('div', { class: 'stats' },
         h('div', { class: 'stat' }, h('div', { class: 'stat-title' }, 'Yea – Nay'), h('div', { class: 'stat-value' }, `${rc.yea_n} – ${rc.nay_n}`),
@@ -253,7 +274,7 @@
 
   // ---------- Member page ----------
   async function memberPage(icpsr, chamber, congress) {
-    const rows = await run('member', [icpsr], []);
+    const rows = await data.member(icpsr);
     if (!rows.length) return [h('h1', {}, 'Member not found')];
     const last = rows[rows.length - 1];
     const out = [h('h1', {}, last.bioname),
@@ -265,9 +286,10 @@
           h('td', {}, r.nominate_dim1 == null ? '—' : Number(r.nominate_dim1).toFixed(3)),
           h('td', {}, hasPartition(r.chamber, r.congress) ? [link(`#/member/${icpsr}/${r.chamber}/${r.congress}`, 'Votes'), ' · ', link(`#/h2h/${r.chamber}/${r.congress}?a=${icpsr}`, 'Head-to-head')] : 'not loaded'))))),
       definition('NOMINATE 1: DW-NOMINATE first-dimension score from Voteview, estimated from all of this member\'s roll-call votes. It locates members relative to each other; it is not a label.'),
-      h('p', { class: 'muted' }, 'By topic and blocs: next on the build list.')];
+      h('p', { class: 'muted' }, 'Agreement by topic is on the head-to-head page. Blocs: next on the build list.')];
     if (chamber && congress) {
-      const votes = await run('member_votes', [icpsr, chamber, congress], [[chamber, congress]]);
+      const [file, positions] = await Promise.all([data.rollcalls(chamber, congress), data.positions(chamber, congress)]);
+      const votes = K.memberVotes(icpsr, file.rows, positions);
       const counts = { 1: 0, '-1': 0, 0: 0 };
       votes.forEach((v) => counts[v.position]++);
       out.push(h('h2', {}, `${ordinal(congress)} Congress, ${chamber}: ${votes.length} roll calls`),
@@ -284,7 +306,7 @@
   // ---------- About ----------
   async function about() {
     const a = settings.analysis;
-    const cov = engine.coverage ? await engine.coverage() : null;
+    const cov = await data.coverage();
     return [
       h('h1', {}, 'Definitions and sources'),
       h('h2', {}, 'Metrics'),
@@ -334,10 +356,10 @@
     window.scrollTo(0, 0);
   }
 
-  async function start(eng, sett, mountId = 'app') {
-    engine = eng; settings = sett;
+  async function start(dataSource, sett, mountId = 'app') {
+    data = dataSource; settings = sett;
     view = document.getElementById(mountId);
-    manifest = await engine.manifest();
+    manifest = await data.manifest();
     window.addEventListener('hashchange', render);
     await render();
   }

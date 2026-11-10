@@ -1,6 +1,7 @@
 # Full data pipeline + site deploy to GitHub Pages. Manual run, and weekly.
 # Fetches Voteview and Policy Agendas data (the dev sandbox may not reach them), builds parquet for every Congress,
-# runs the tests, and publishes build/site. Nothing generated is committed.
+# computes every result upstream (pipeline/results.py), runs the tests, and publishes build/site.
+# Nothing generated is committed.
 name: pipeline-and-pages
 on:
   workflow_dispatch:
@@ -29,9 +30,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install
-        run: |
-          pip install -q -r requirements.txt
-          npm ci
+        run: pip install -q -r requirements.txt
       - name: Tests (fixture)
         run: pytest -q && npm test
       - name: Fetch sources
@@ -49,7 +48,7 @@ jobs:
           python -m pipeline.build --raw build/raw --out build/data
           python -m pipeline.build_site --data build/data --out build/site
           python -c "import json; c=json.load(open('build/data/coverage.json')); print('missing partitions:', c['missing_partitions']); print('PAP parse:', c['pap_parse'])"
-          du -sh build/site build/site/data
+          du -sh build/site build/site/results
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

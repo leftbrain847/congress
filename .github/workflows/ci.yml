@@ -16,9 +16,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install
-        run: |
-          pip install -q -r requirements.txt
-          npm ci
+        run: pip install -q -r requirements.txt
       - name: Node tests
         run: npm test
       - name: Python tests

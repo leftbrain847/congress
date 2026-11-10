@@ -1,16 +1,16 @@
 # Congress
 
-A public, neutral site for U.S. House and Senate roll-call voting, 1789 to the present. It answers one question: who votes with whom, on what, and how did each vote split? It's a static site on GitHub Pages: every query runs in the visitor's browser (DuckDB-WASM over partitioned parquet). There's no backend, no API key, and no outside loads at runtime.
+A public, neutral site for U.S. House and Senate roll-call voting, 1789 to the present. It answers one question: who votes with whom, on what, and how did each vote split? It's a static site on GitHub Pages. Computation happens as early as possible: the pipeline computes every per-roll-call result ahead of time, and the browser only adds up the pair a visitor picks. There's no backend, no in-browser database, no API key, and no outside loads at runtime.
 
-**Built so far:** head-to-head agreement (feature 1) and the bill view (feature 4) for both chambers, plus member pages and chamber/Congress pickers.
-**Next:** agreement by topic (feature 2) and blocs (feature 3); see `next` in `project.yml`.
+**Built so far:** head-to-head agreement (feature 1), agreement by topic with a Policy Agendas / CRS switch (feature 2), and the bill view (feature 4), for both chambers, plus member pages and chamber/Congress pickers.
+**Next:** blocs (feature 3); see `next` in `project.yml`.
 
 ## Run
 From a clean clone, against the committed fixture (real Voteview and Policy Agendas slices for the 1st, 93rd and 118th Congresses, both chambers):
 ```
-pip install -r requirements.txt && npm ci
+pip install -r requirements.txt
 python -m pipeline.build --raw fixture/raw --out build/data          # sources -> partitioned parquet
-python -m pipeline.build_site --data build/data --out build/site     # site + self-hosted DuckDB-WASM
+python -m pipeline.build_site --data build/data --out build/site     # site + precomputed results/
 cd build/site && python -m http.server 8000                          # open http://localhost:8000
 ```
 For the full history, run the **pipeline-and-pages** workflow in GitHub Actions. It fetches every Congress (`python -m pipeline.fetch --raw build/raw`), builds, tests and deploys. To refresh the fixture: `python -m pipeline.fetch --raw build/raw --congress 1 93 118 && python -m pipeline.make_fixture --raw build/raw`.
@@ -25,13 +25,15 @@ CI runs both, then the fixture build end to end. The tests cover:
 - small-n suppression;
 - CRS topic inheritance for amendments;
 - the Policy Agendas file's quirks;
+- agreement by topic;
 - the site's SQL against an independent count on real data;
-- day-snapshot parity with the SQL;
+- the browser's pair aggregation (`site/js/compute.js`) against the SQL, at two thresholds;
 - the NOMINATE cutting line.
 
 ## How it works
 - **Settings:** every tunable lives in `config/settings.yaml`: contested threshold, minimum shared votes, rolling window, topic scheme, clustering resolution, chambers, Congress range and the NOMINATE dimension-2 weight. `build_site` mirrors it into `settings.json` for the page.
-- **One set of queries:** `site/sql/*.sql` is what the browser runs, and the same files run in Python DuckDB for the tests and the day page. The math lives in one place.
+- **Compute upstream:** `pipeline/results.py` runs `site/sql/*.sql` in Python DuckDB and writes small JSON files per chamber and Congress: members, roll calls (with party splits, crossers, contested share and topics) and a compact vote matrix. Precomputing every pair × every topic would be about 40 MB per House Congress, so the one live aggregation is the picked pair's agreement, overall and by topic (`site/js/compute.js`). A parity test runs it against the SQL.
+- **Load size:** a recent House Congress is about 1.6 MB of JSON (about 0.2 MB gzipped). Timed in throttled Chromium (4× CPU slowdown): with gzip, a cold load of a House head-to-head took 1.2 s on typical 4G and 3.1 s on slow 4G; later clicks took about 0.1–0.4 s.
 - **Sources:** checked against the real files on 2026-11-09, not assumed.
   - **Voteview per-Congress files:**
     - `votes` and `members` CSVs;
@@ -44,7 +46,7 @@ CI runs both, then the fixture build end to end. The tests cover:
     - 569 rows of the 118th have their topic columns shifted one place right. `pipeline/pap.py` documents and handles each quirk.
   - **Join check:** every 93rd- and 118th-Congress roll call that Policy Agendas covers joins to Voteview with identical yea/nay counts.
 - **CRS inheritance:** a roll call with no CRS policy area takes the area of its bill: the same bill number in the same Congress, with the most common tag winning and ties broken alphabetically. `coverage.json` and the About page show the share still untagged per chamber and Congress.
-- **Zero outside loads:** DuckDB-WASM's wasm, workers and parquet extension are served from `vendor/`, each pinned by sha256 in `config/vendor.lock.json`. The build refuses a file that doesn't match. Fonts are system fonts. The page's CSP allows only its own origin.
+- **Zero outside loads:** no third-party libraries or fonts (system fonts only). The page's CSP allows only its own origin.
 
 ## Definitions (shown on the site next to every number)
 - **Shared vote:** both members voted yea or nay. Present and not voting are left out.
@@ -55,7 +57,7 @@ CI runs both, then the fixture build end to end. The tests cover:
 
 ## Deployed
 - Live: GitHub Pages once Pages is enabled and the pipeline workflow has run.
-- Day snapshot: `snapshots/2026-11-09 - Congress.html` (frozen; never edited)
+- Day snapshots: `snapshots/2026-11-09 - Congress.html`, `snapshots/2026-11-10 - Congress.html` (frozen; never edited)
 
 ## Ship a sprint day
 Build the day page, then freeze it:
