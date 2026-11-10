@@ -1,0 +1,7 @@
+# Read nightly by leftbrain847/index. /new-project fills this in; edit any time.
+theme: "data"         # one of the index's config.themes
+tags: []              # J chose to come back to tags; the index lists this repo under "Needs setup" until then
+what: "Public, neutral static site for U.S. House and Senate roll-call voting, 1789-present: who votes with whom, on what, and how each vote split. All compute runs in the browser (DuckDB-WASM over parquet)."
+next: "Enable GitHub Pages (Source: GitHub Actions) and run the pipeline workflow for the full history. Then feature 2, agreement by topic: PAP/CRS switch, cells under min_shared_votes hidden. Then feature 3, blocs: signed agreement network per Congress or rolling window, Louvain, bloc movement over time, and the bloc split on the bill view."
+active: true          # true pulls this repo's tasks into J's queue
+public: true          # informational; each sprint day's snapshot decides publishing
