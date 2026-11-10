@@ -1,5 +1,5 @@
-"""Run the site's SQL (site/sql/*.sql) in Python DuckDB: the exact queries the browser runs in DuckDB-WASM.
-Tests use this to check the math the site shows; precompute.py uses it to build the self-contained day snapshot.
+"""Run the site's SQL (site/sql/*.sql) in Python DuckDB. The pipeline (results.py) computes every result the site
+shows with these queries, and the tests use them to check that math and the browser's pair aggregation.
 """
 from pathlib import Path
 
@@ -21,6 +21,17 @@ def connect(data_dir: Path) -> duckdb.DuckDBPyConnection:
     con.execute(f"CREATE TABLE members AS SELECT * FROM read_parquet('{d}/members.parquet')")
     con.execute(f"CREATE TABLE votes AS SELECT * FROM read_parquet('{d}/votes/*/*/votes.parquet')")
     con.execute(f"CREATE TABLE rollcalls AS SELECT * FROM read_parquet('{d}/rollcalls/*/*/rollcalls.parquet')")
+    return con
+
+
+def connect_partition(data_dir: Path, chamber: str, congress: int) -> duckdb.DuckDBPyConnection:
+    """The same tables, holding one chamber/Congress (fast per-roll-call queries over full-history builds)."""
+    d = str(Path(data_dir)).replace("'", "''")
+    part = f"chamber={chamber}/congress={int(congress)}"
+    con = duckdb.connect()
+    con.execute(f"CREATE TABLE members AS SELECT * FROM read_parquet('{d}/members.parquet')")
+    con.execute(f"CREATE TABLE votes AS SELECT * FROM read_parquet('{d}/votes/{part}/votes.parquet')")
+    con.execute(f"CREATE TABLE rollcalls AS SELECT * FROM read_parquet('{d}/rollcalls/{part}/rollcalls.parquet')")
     return con
 
 

@@ -22,7 +22,7 @@
 
 ## Repo notes
 - Tunables live only in `config/settings.yaml`; the front end reads the mirrored `settings.json`. Never put a threshold or count in code.
-- `site/sql/*.sql` is the single source of the math. The browser, the tests (`pipeline/queries.py`) and the day page all run these files; change math there and add a test in `tests/py`.
-- Upgrading DuckDB-WASM: bump `package.json`, `npm install`, `python -m pipeline.build_site --update-vendor-lock`, and check the extension paths in `config/vendor.lock.json` match the new DuckDB version.
+- Compute as early as reasonably possible. The pipeline precomputes; the browser does only aggregations that must be live (today: the picked pair's agreement, in `site/js/compute.js`). Prefer moving work upstream.
+- `site/sql/*.sql` is the single source of the math. The pipeline (`pipeline/results.py`) and the tests run these files; anything the browser computes must have a parity test against them (`tests/py/test_compute_parity.py`).
 - `build/` is generated (data, site, day page) and never committed. The fixture in `fixture/raw` is committed test input.
 - Neutral wording: show data with its definition and n. No editorial labels for members or votes.

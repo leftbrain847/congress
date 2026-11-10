@@ -26,4 +26,3 @@ Thumbs.db
 # Claude Code
 .claude/worktrees/
 build/
-site/js/sql.generated.js

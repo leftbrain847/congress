@@ -6,7 +6,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -19,6 +19,7 @@ jobs:
         run: |
           pip install -q -r requirements.txt
           npm ci
+          npx playwright install --with-deps chromium
       - name: Node tests
         run: npm test
       - name: Python tests
@@ -28,3 +29,7 @@ jobs:
           python -m pipeline.build --raw fixture/raw --out build/data
           python -m pipeline.build_site --data build/data --out build/site
           python -m pipeline.snapshot_page --data build/data --out build/day.html
+      - name: Browser tests (site and day page, as a visitor at phone width)
+        run: npm run e2e
+      - name: Browser tests again with slow responses (catches tests that read a page before it re-renders)
+        run: E2E_DELAY_MS=600 npm run e2e

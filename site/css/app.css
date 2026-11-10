@@ -93,3 +93,26 @@ figcaption { color: var(--muted); font-size: .88rem; }
   h1 { font-size: 1.35rem; }
 }
 .table-wrap { overflow-x: auto; max-width: 100%; }
+/* Head-to-head context strip */
+.ctx-wrap { margin: 16px 0; }
+.ctx-title { font-weight: 600; margin-bottom: 4px; }
+.ctx { width: 100%; max-width: 560px; height: auto; display: block; }
+.ctx-grid { stroke: var(--line); stroke-dasharray: 2 3; }
+.ctx-tick { fill: var(--muted); font-size: 11px; font-family: inherit; }
+.ctx-row { margin-top: 6px; }
+.ctx-label { color: var(--muted); font-size: .85rem; }
+.ctx-whisker { stroke: var(--muted); stroke-width: 1.5; }
+.ctx-wrap p { margin: 4px 0; }
+.ctx-box.same_party { fill: var(--yea); opacity: .55; }
+.ctx-box.different_party { fill: var(--nay); opacity: .55; }
+.ctx-median { stroke: var(--ink); stroke-width: 2; }
+.ctx-pair { stroke: var(--accent); stroke-width: 3; }
+/* Topic bars */
+.topics { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 12px; }
+.topic-head { display: flex; justify-content: space-between; gap: 8px; }
+.topic-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.topic-pct { font-variant-numeric: tabular-nums; font-weight: 700; }
+.topic-bar { position: relative; height: 10px; background: var(--notice); border-radius: 3px; margin: 4px 0 2px; }
+.topic-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
+.topic-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); }
+.topic-n { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }

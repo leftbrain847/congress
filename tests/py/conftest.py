@@ -51,7 +51,13 @@ def csv_text(header, rows):
     return buf.getvalue()
 
 
-def make_tiny_raw(raw: Path):
+def make_tiny_raw(raw: Path, congresses=(CONGRESS,)):
+    for c in congresses:
+        _tiny_congress(raw, c)
+    _tiny_shared(raw, congresses)
+
+
+def _tiny_congress(raw: Path, CONGRESS: int):
     vv = raw / "voteview"
     members = [[CONGRESS, "President", PRESIDENT, "", 100, "", "", "", "PRES", "", "", "", "", ""]]
     for icpsr, (name, party) in MEMBERS.items():
@@ -71,6 +77,11 @@ def make_tiny_raw(raw: Path):
             "yea_count": 0, "nay_count": 0, "nominate_mid_1": 0.1, "nominate_mid_2": 0.0,
             "nominate_spread_1": 0.5, "nominate_spread_2": 0.2, **r} for r in ROLLCALLS]
     write_gz(vv / "rollcalls" / f"S{CONGRESS:03d}_rollcalls.json.gz", json.dumps(rcs))
+
+
+def _tiny_shared(raw: Path, congresses):
+    vv = raw / "voteview"
+    CONGRESS = congresses[0]
     write_gz(vv / "parties" / "HSall_parties.csv.gz", csv_text(
         ["congress", "chamber", "party_code", "party_name"], [[CONGRESS, "Senate", 100, "Party One"],
                                                               [CONGRESS, "Senate", 200, "Party Two"]]))
@@ -93,6 +104,16 @@ def tiny_data(tmp_path_factory, cfg):
     raw = tmp_path_factory.mktemp("tiny_raw")
     make_tiny_raw(raw)
     out = tmp_path_factory.mktemp("tiny_data")
+    build_mod.build(raw, out, cfg)
+    return out
+
+
+@pytest.fixture(scope="session")
+def tiny2_data(tmp_path_factory, cfg):
+    """The tiny Senate over two Congresses (50 and 51), for multi-Congress sums."""
+    raw = tmp_path_factory.mktemp("tiny2_raw")
+    make_tiny_raw(raw, (CONGRESS, CONGRESS + 1))
+    out = tmp_path_factory.mktemp("tiny2_data")
     build_mod.build(raw, out, cfg)
     return out
 

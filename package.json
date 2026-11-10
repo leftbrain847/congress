@@ -2,12 +2,12 @@
   "name": "congress",
   "private": true,
   "type": "module",
-  "description": "Static site for U.S. House and Senate roll-call voting; DuckDB-WASM runs every query in the browser.",
+  "description": "Static site for U.S. House and Senate roll-call voting. Results are computed upstream; the browser only aggregates the selected pair.",
   "scripts": {
-    "test": "node --test \"tests/*.test.mjs\""
+    "test": "node --test \"tests/*.test.mjs\"",
+    "e2e": "node --test \"tests/e2e/*.e2e.mjs\""
   },
   "devDependencies": {
-    "@duckdb/duckdb-wasm": "1.32.0",
-    "esbuild": "0.28.2"
+    "playwright": "1.63.0"
   }
 }
