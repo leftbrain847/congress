@@ -10,6 +10,7 @@ House Congress. Files:
   {chamber}/{congress}/rollcalls.json   {"rows": rollcalls.sql, "split": {roll: [[party, yea, nay, not_voting]]},
                                          "crossers": {roll: [[icpsr, position]]}}
   {chamber}/{congress}/positions.json   {"order": [icpsr...], "by_roll": {roll: "y"/"n"/"p"/"-" per member}}
+  {chamber}/{congress}/context.json     how contested agreement is spread over all pairs (pair_distribution.sql)
   members/{icpsr}.json                  every Congress a member served (member.sql)
 """
 import argparse
@@ -28,7 +29,7 @@ def clean(rows):
     return [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()} for r in rows]
 
 
-def partition_files(con, chamber: str, congress: int) -> dict:
+def partition_files(con, chamber: str, congress: int, cfg: dict) -> dict:
     members = clean(queries.run(con, "members", chamber, congress))
     rows = clean(queries.run(con, "rollcalls", chamber, congress))
     split, crossers = {}, {}
@@ -44,7 +45,11 @@ def partition_files(con, chamber: str, congress: int) -> dict:
                                         [chamber, congress]).fetchall():
         by_roll.setdefault(roll, ["-"] * len(order))[idx[icpsr]] = POS_CHAR[pos]
     base = f"{chamber}/{congress}"
+    a = cfg["analysis"]
+    context = {"contested_threshold": a["contested_threshold"], "min_shared_votes": a["min_shared_votes"],
+               "groups": clean(queries.run(con, "pair_distribution", a["contested_threshold"], a["min_shared_votes"]))}
     return {
+        f"{base}/context.json": context,
         f"{base}/members.json": members,
         f"{base}/rollcalls.json": {"rows": rows, "split": split, "crossers": crossers},
         f"{base}/positions.json": {"order": order, "by_roll": {str(r): "".join(v) for r, v in sorted(by_roll.items())}},
@@ -53,7 +58,13 @@ def partition_files(con, chamber: str, congress: int) -> dict:
 
 def build(data: Path, scope: list[tuple[str, int]] | None = None) -> dict:
     """Return {relative path: JSON-able object} for the partitions in scope (default: every partition)."""
+    return dict(iter_files(data, scope))
+
+
+def iter_files(data: Path, scope: list[tuple[str, int]] | None = None):
+    """Yield (relative path, JSON-able object) one partition at a time, so a full-history build stays small in memory."""
     data = Path(data)
+    cfg = settings_mod.load()
     con = duckdb.connect()
     con.execute(f"CREATE TABLE members AS SELECT * FROM read_parquet('{str(data / 'members.parquet').replace(chr(39), chr(39) * 2)}')")
     manifest = json.loads((data / "manifest.json").read_text())
@@ -61,30 +72,31 @@ def build(data: Path, scope: list[tuple[str, int]] | None = None) -> dict:
     if scope is not None:
         keep = set(scope)
         parts = [p for p in parts if (p["chamber"], p["congress"]) in keep]
-    files = {}
+    icpsrs = set()
     for p in parts:
         pcon = queries.connect_partition(data, p["chamber"], p["congress"])
-        files.update(partition_files(pcon, p["chamber"], p["congress"]))
+        for path, obj in partition_files(pcon, p["chamber"], p["congress"], cfg).items():
+            if path.endswith("/members.json"):
+                icpsrs.update(m["icpsr"] for m in obj)
+            yield path, obj
         pcon.close()
     keep = {(p["chamber"], p["congress"]) for p in parts}
-    icpsrs = sorted({i for (i,) in con.execute("SELECT DISTINCT icpsr FROM members").fetchall()} if scope is None else
-                    {m["icpsr"] for path, obj in files.items() if path.endswith("/members.json") for m in obj})
-    for icpsr in icpsrs:
-        files[f"members/{icpsr}.json"] = clean(queries.run(con, "member", icpsr))
-    files["manifest.json"] = {
+    for icpsr in sorted(icpsrs):
+        yield f"members/{icpsr}.json", clean(queries.run(con, "member", icpsr))
+    yield "manifest.json", {
         "generated_at": manifest["generated_at"], "sources": manifest["sources"],
         "partitions": [{k: p[k] for k in ("chamber", "congress", "rollcall_count", "member_count", "first_date", "last_date")}
                        for p in parts],
     }
     cov = json.loads((data / "coverage.json").read_text())
     cov["crs_and_pap_by_partition"] = [r for r in cov["crs_and_pap_by_partition"] if (r["chamber"], r["congress"]) in keep]
-    files["coverage.json"] = cov
-    return files
+    yield "coverage.json", cov
 
 
-def write(files: dict, out: Path):
+def write(files, out: Path):
+    """Write (path, object) pairs from iter_files, or a dict from build()."""
     out = Path(out)
-    for rel, obj in files.items():
+    for rel, obj in (files.items() if isinstance(files, dict) else files):
         dest = out / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(json.dumps(obj, separators=(",", ":")), encoding="utf-8")
@@ -96,9 +108,8 @@ def main(argv=None) -> int:
     ap.add_argument("--data", default=cfg["output"]["data_dir"])
     ap.add_argument("--out", default="build/site/results")
     args = ap.parse_args(argv)
-    files = build(Path(args.data))
-    write(files, Path(args.out))
-    print(f"results: {len(files)} files -> {args.out}")
+    write(iter_files(Path(args.data)), Path(args.out))
+    print(f"results: -> {args.out}")
     return 0
 
 

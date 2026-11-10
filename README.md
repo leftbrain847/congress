@@ -57,7 +57,7 @@ CI runs both, then the fixture build end to end. The tests cover:
 
 ## Deployed
 - Live: GitHub Pages once Pages is enabled and the pipeline workflow has run.
-- Day snapshots: `snapshots/2026-11-09 - Congress.html`, `snapshots/2026-11-10 - Congress.html` (frozen; never edited)
+- Day snapshot: `snapshots/2026-11-09 - Congress.html`. It holds the final 11/9 sprint build: work queued before midnight counts for that day under the sprint rule.
 
 ## Ship a sprint day
 Build the day page, then freeze it:

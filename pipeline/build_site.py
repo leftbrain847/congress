@@ -36,7 +36,7 @@ def build_site(data: Path, out: Path, cfg: dict):
         shutil.copyfile(ROOT / "site" / rel, out / rel)
     (out / "settings.json").write_text(json.dumps(front_settings(cfg), indent=1))
     (out / ".nojekyll").write_text("")
-    results.write(results.build(data), out / "results")
+    results.write(results.iter_files(data), out / "results")
 
 
 def main(argv=None) -> int:

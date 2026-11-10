@@ -30,7 +30,10 @@ jobs:
         with:
           node-version: "22"
       - name: Install
-        run: pip install -q -r requirements.txt
+        run: |
+          pip install -q -r requirements.txt
+          npm ci
+          npx playwright install --with-deps chromium
       - name: Tests (fixture)
         run: pytest -q && npm test
       - name: Fetch sources
@@ -47,8 +50,11 @@ jobs:
         run: |
           python -m pipeline.build --raw build/raw --out build/data
           python -m pipeline.build_site --data build/data --out build/site
+          python -m pipeline.snapshot_page --data build/data --out build/day.html
           python -c "import json; c=json.load(open('build/data/coverage.json')); print('missing partitions:', c['missing_partitions']); print('PAP parse:', c['pap_parse'])"
           du -sh build/site build/site/results
+      - name: Browser tests on the full build (blocks the deploy if anything fails)
+        run: npm run e2e
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

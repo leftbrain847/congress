@@ -99,12 +99,68 @@
     ];
   }
 
+  // Where this pair's contested agreement sits among every pair in the same chamber and Congress (context.json).
+  function percentileBand(g, v) {
+    const cuts = [[g.p10, 10], [g.p25, 25], [g.p50, 50], [g.p75, 75], [g.p90, 90]];
+    if (v < g.p10) return 'below the 10th percentile';
+    if (v >= g.p90) return 'at or above the 90th percentile';
+    for (let i = 0; i < cuts.length - 1; i++) if (v >= cuts[i][0] && v < cuts[i + 1][0]) return `between the ${ordinal(cuts[i][1])} and ${ordinal(cuts[i + 1][1])} percentiles`;
+    return '';
+  }
+
+  function contextStrip(ctx, value, chamber, congress, sameParty) {
+    const groups = Object.fromEntries((ctx.groups || []).map((g) => [g.grp, g]));
+    const rows = [['same_party', 'Same-party pairs'], ['different_party', 'Different-party pairs']].filter(([k]) => groups[k]);
+    if (!rows.length || value == null) return null;
+    const W = 320, P = 6, x = (v) => P + v * (W - 2 * P);
+    const bar = (k, g) => s('svg', { viewBox: `0 0 ${W} 26`, class: 'ctx', 'aria-hidden': 'true' },
+      [0.25, 0.5, 0.75].map((t) => s('line', { x1: x(t), x2: x(t), y1: 0, y2: 26, class: 'ctx-grid' })),
+      s('line', { x1: x(g.p10), x2: x(g.p90), y1: 13, y2: 13, class: 'ctx-whisker' }),
+      s('rect', { x: x(g.p25), y: 6, width: Math.max(2, x(g.p75) - x(g.p25)), height: 14, rx: 2, class: `ctx-box ${k}` }),
+      s('line', { x1: x(g.p50), x2: x(g.p50), y1: 3, y2: 23, class: 'ctx-median' }),
+      s('line', { x1: x(value), x2: x(value), y1: 0, y2: 26, class: 'ctx-pair' }));
+    const axis = s('svg', { viewBox: `0 0 ${W} 14`, class: 'ctx', 'aria-hidden': 'true' },
+      [0, 0.25, 0.5, 0.75, 1].map((t) => s('text', { x: x(t), y: 11, class: 'ctx-tick', 'text-anchor': t === 0 ? 'start' : t === 1 ? 'end' : 'middle' }, `${t * 100}%`)));
+    const own = groups[sameParty ? 'same_party' : 'different_party'];
+    const sentence = own ? `This pair agreed on ${M.formatPct(value)} of contested votes. Among the ${M.formatInt(own.pairs)} ${sameParty ? 'same-party' : 'different-party'} pairs in the ${ordinal(congress)} Congress ${chamber}, the median is ${M.formatPct(own.p50)}; this pair is ${percentileBand(own, value)}.` : '';
+    return h('figure', { class: 'ctx-wrap' },
+      h('figcaption', { class: 'ctx-title' }, `Compared with every pair in the ${ordinal(congress)} Congress ${chamber}`),
+      h('p', {}, sentence),
+      rows.map(([k, label]) => h('div', { class: 'ctx-row' },
+        h('div', { class: 'ctx-label' }, `${label}: median ${M.formatPct(groups[k].p50)} (${M.formatInt(groups[k].pairs)} pairs)`), bar(k, groups[k]))),
+      axis,
+      h('p', { class: 'def' }, 'Blue line: this pair. Box: the middle half of pairs. Whisker: the middle 80%. Tick: the median. ',
+        `Agreement on contested votes, among pairs with at least ${ctx.min_shared_votes} shared contested votes. Party is the party Voteview records for each member in this Congress.`));
+  }
+
+  function topicRows(byTopic, scheme, minN, overall) {
+    const coded = byTopic.filter((r) => r.topic !== ''), uncoded = byTopic.find((r) => r.topic === '');
+    const shown = coded.filter((r) => r.shared_contested >= minN).sort((a, b) => b.shared_contested - a.shared_contested);
+    const small = coded.filter((r) => r.shared_contested < minN).sort((a, b) => b.shared_contested - a.shared_contested);
+    const row = (r, label) => {
+      const pct = r.agree_contested / r.shared_contested;
+      return h('li', { class: 'topic' },
+        h('div', { class: 'topic-head' }, h('span', { class: 'topic-name' }, label), h('span', { class: 'topic-pct' }, M.formatPct(pct))),
+        h('div', { class: 'topic-bar' }, h('span', { class: 'topic-fill', style: `width:${(pct * 100).toFixed(1)}%` }),
+          overall != null ? h('span', { class: 'topic-mark', style: `left:${(overall * 100).toFixed(1)}%` }) : null),
+        h('div', { class: 'topic-n' }, `n = ${M.formatInt(r.shared_contested)} contested · all votes ${pctCell(r.agree_all, r.shared_all, minN)} (n = ${M.formatInt(r.shared_all)})`));
+    };
+    return [
+      shown.length ? h('ol', { class: 'topics' }, shown.map((r) => row(r, topicName(scheme, r.topic))),
+        uncoded && uncoded.shared_contested >= minN ? row(uncoded, 'Not coded') : null)
+        : h('p', { class: 'muted' }, `No topic has ${minN} or more shared contested votes for this pair.`),
+      small.length ? h('p', { class: 'muted' }, `Fewer than ${minN} shared contested votes, not shown: ` +
+        small.map((r) => `${topicName(scheme, r.topic)} (${r.shared_contested})`).join(', ') + '.') : null,
+      overall != null ? h('p', { class: 'def' }, `Bars: agreement on contested votes in each topic. Marker: this pair's agreement on all contested votes (${M.formatPct(overall)}). Sorted by number of shared contested votes.`) : null,
+    ];
+  }
+
   // ---------- Head-to-head ----------
   async function headToHead(chamber, congress, q) {
     const out = [h('h1', {}, 'Head-to-head'), pickers(chamber, congress, (c, n) => `#/h2h/${c}/${n}`)];
     const members = await data.members(chamber, congress);
     const a = Number(q.get('a')) || null, b = Number(q.get('b')) || null;
-    const scope = q.get('scope') === 'congress' ? 'congress' : 'all';
+    const scope = q.get('scope') === 'all' ? 'all' : 'congress';
     const scheme = ['pap', 'crs'].includes(q.get('topic')) ? q.get('topic') : settings.analysis.topic_scheme;
     const route = (na, nb, sc = scope, tp = scheme) => {
       const p = new URLSearchParams();
@@ -129,8 +185,8 @@
     const span = scope === 'congress' ? [congress] : shared.filter((c) => hasPartition(chamber, c));
     const missing = scope === 'all' ? shared.filter((c) => !hasPartition(chamber, c)) : [];
     out.push(h('div', { class: 'seg', role: 'group', 'aria-label': 'Congresses counted' },
-      h('a', { href: route(a, b, 'all'), class: scope === 'all' ? 'on' : '' }, `All Congresses together (${shared.length})`),
-      h('a', { href: route(a, b, 'congress'), class: scope === 'congress' ? 'on' : '' }, `${ordinal(congress)} only`)));
+      h('a', { href: route(a, b, 'congress'), class: scope === 'congress' ? 'on' : '' }, `${ordinal(congress)} Congress`),
+      h('a', { href: route(a, b, 'all'), class: scope === 'all' ? 'on' : '' }, `All ${shared.length} Congresses together`)));
     const t = settings.analysis.contested_threshold, minN = settings.analysis.min_shared_votes;
     const parts = await Promise.all(span.map(async (c) => {
       const [rc, positions] = await Promise.all([data.rollcalls(chamber, c), data.positions(chamber, c)]);
@@ -138,6 +194,9 @@
     }));
     const res = K.pairAgreement(parts, a, b, t, scheme);
     const used = res.byCongress;
+    const ctx = hasPartition(chamber, congress) ? await data.context(chamber, congress) : null;
+    const here = used.find((r) => r.congress === congress);
+    const hereShown = here && here.shared_contested >= minN;
     const sum = M.summarizeH2h(used, minN);
     const names = [a, b].map((id) => members.find((m) => m.icpsr === id));
 
@@ -153,6 +212,7 @@
           `Share of contested roll calls where both voted the same way. Contested: the smaller side had at least ${M.formatPct(t, 0)} of the yea and nay votes. Shared: both voted yea or nay (present and not voting are left out).`),
         stat('Agreement on all shared votes', sum.pct_all, sum.shared_all, sum.all_shown,
           'The same measure over every shared roll call, including near-unanimous ones. Shown for comparison: lopsided votes push every pair toward agreement.')),
+      ctx && hereShown && names[0] && names[1] ? contextStrip(ctx, here.agree_contested / here.shared_contested, chamber, congress, names[0].party_code === names[1].party_code) : null,
       missing.length ? notice(`Not loaded in this build: ${missing.map(ordinal).join(', ')} Congress. Totals cover only the Congresses listed below.`) : null,
       used.length ? table(
         h('thead', {}, h('tr', {}, h('th', {}, 'Congress'), h('th', {}, 'Contested'), h('th', {}, 'n'), h('th', {}, 'All'), h('th', {}, 'n'))),
@@ -170,14 +230,7 @@
       definition(scheme === 'pap'
         ? 'Policy Agendas Project major topic of each roll call (coded for the 79th–118th Congresses, 1945–2024).'
         : 'Congressional Research Service policy area of the bill (93rd Congress, 1973, onward). Amendments and procedural votes take their bill\'s area.'),
-      res.byTopic.length ? table(
-        h('thead', {}, h('tr', {}, h('th', {}, 'Topic'), h('th', {}, 'Contested'), h('th', {}, 'n'), h('th', {}, 'All'), h('th', {}, 'n'))),
-        h('tbody', {}, res.byTopic.slice().sort((x, y) => y.shared_all - x.shared_all).map((r) => h('tr', {},
-          h('td', {}, topicName(scheme, r.topic)),
-          h('td', {}, pctCell(r.agree_contested, r.shared_contested, minN)), h('td', {}, M.formatInt(r.shared_contested)),
-          h('td', {}, pctCell(r.agree_all, r.shared_all, minN)), h('td', {}, M.formatInt(r.shared_all))))))
-        : h('p', { class: 'muted' }, 'No shared votes to split.'),
-      h('p', { class: 'muted' }, `Sorted by shared votes. Cells with n below ${minN} show —.`),
+      res.byTopic.length ? topicRows(res.byTopic, scheme, minN, sum.contested_shown ? sum.pct_contested : null) : h('p', { class: 'muted' }, 'No shared votes to split.'),
       h('p', {}, link(`#/member/${a}`, `${names[0] ? names[0].bioname : a}: member page`), ' · ', link(`#/member/${b}`, `${names[1] ? names[1].bioname : b}: member page`))));
     return out;
   }

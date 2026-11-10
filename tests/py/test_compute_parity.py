@@ -73,3 +73,22 @@ def test_results_carry_precomputed_split_and_crossers(fixture_data):
         assert rc["crossers"][str(roll)] == [[x["icpsr"], x["position"]] for x in queries.run(con, "bill_crossers", "Senate", 118, roll)]
     assert set(files) >= {"manifest.json", "coverage.json", "Senate/118/members.json", "Senate/118/positions.json"}
     assert all(f"members/{m['icpsr']}.json" in files for m in files["Senate/118/members.json"])
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_multi_congress_sum_matches_sql(tiny2_data, tmp_path):
+    """The default 'All Congresses together' view adds up several Congresses; check the sum against the SQL."""
+    files = results.build(tiny2_data)
+    con = queries.connect(tiny2_data)
+    calls, want = [], []
+    for a, b in [(1, 2), (1, 3), (4, 5)]:
+        for scheme in ("pap", "crs"):
+            calls.append(["pair", {"chamber": "Senate", "congresses": [50, 51], "a": a, "b": b, "t": 0.10, "scheme": scheme}])
+            want.append({"byCongress": queries.run(con, "h2h", a, b, "Senate", 50, 51, 0.10),
+                         "byTopic": queries.run(con, "h2h_by_topic", a, b, "Senate", 50, 51, 0.10, scheme)})
+        calls.append(["shared", {"a": a, "b": b, "chamber": "Senate"}])
+        want.append([50, 51])
+    got = run_node(tmp_path, calls, files)
+    for call, g, w in zip(calls, got, json.loads(json.dumps(want))):
+        assert g == w, call
+    assert got[0]["byCongress"][0]["shared_all"] == 5 and len(got[0]["byCongress"]) == 2

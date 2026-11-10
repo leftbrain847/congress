@@ -6,6 +6,7 @@ The same front end as the live site, with the same result files (pipeline/result
 for the chamber/Congress partitions given (default: the 118th Congress, both chambers).
 """
 import argparse
+import html as html_mod
 import json
 import sys
 from pathlib import Path
@@ -29,11 +30,12 @@ def page(files: dict, cfg: dict, title: str) -> str:
     sett["scope"] = {**sett["scope"], "default_chamber": "Senate", "default_congress": max(p["congress"] for p in parts)}
     label = " and ".join(f"{ordinal(n)} Congress" for n in sorted({p["congress"] for p in parts})) + \
         " (" + ", ".join(sorted({p["chamber"] for p in parts})) + ")"
-    data_json = json.dumps(files, separators=(",", ":")).replace("</", "<\\/")
-    sett_json = json.dumps(sett, separators=(",", ":")).replace("</", "<\\/")
+    # Escape every "<" so no data value can open or close a tag inside the <script> blocks.
+    data_json = json.dumps(files, separators=(",", ":")).replace("<", "\\u003c")
+    sett_json = json.dumps(sett, separators=(",", ":")).replace("<", "\\u003c")
     html = read("index.html")
     head_end = html.index("</head>")
-    head = html[:head_end].replace("<title>Congress Roll Calls</title>", f"<title>{title}</title>")
+    head = html[:head_end].replace("<title>Congress Roll Calls</title>", f"<title>{html_mod.escape(title)}</title>")
     head = head.replace('<link rel="stylesheet" href="css/app.css">', f"<style>\n{read('css/app.css')}\n</style>")
     # One self-contained file: inline scripts and styles only, no network at all.
     head = head.replace(head[head.index("<!-- Content-Security-Policy"):head.index("<style>")],

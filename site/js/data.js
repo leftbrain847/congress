@@ -33,6 +33,7 @@
       members: (ch, c) => get(`${part(ch, c)}/members.json`),
       rollcalls: (ch, c) => get(`${part(ch, c)}/rollcalls.json`),
       positions: (ch, c) => get(`${part(ch, c)}/positions.json`),
+      context: (ch, c) => get(`${part(ch, c)}/context.json`),
       member: (icpsr) => get(`members/${Number(icpsr)}.json`),
     };
   }
