@@ -46,8 +46,9 @@ def page(files: dict, cfg: dict, title: str, kind: str = "day") -> str:
                         'style-src \'unsafe-inline\'; img-src data:; base-uri \'none\'">\n')
     body = html[head_end:].split("<script")[0]
     lead = "Current version" if kind == "current" else "Day snapshot"
-    banner = (f'<div class="notice snapshot-note">{lead}: the {label}, with the same precomputed results as the full site, '
-              'embedded in this page.</div>')
+    site = html_mod.escape(cfg["output"]["site_url"], quote=True)
+    banner = (f'<div class="notice snapshot-note">{lead}: the {label}, embedded in this one page. '
+              f'<a href="{site}" target="_blank" rel="noopener">Open the full site</a> for every Congress since 1789.</div>')
     body = body.replace('<main id="app"', banner + '\n<main id="app"', 1)
     body += f'<script type="application/json" id="snapshot-data">{data_json}</script>\n'
     body += "".join(f"<script>\n{read(s)}\n</script>\n" for s in SCRIPTS)

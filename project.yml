@@ -2,6 +2,6 @@
 theme: "data"         # one of the index's config.themes
 tags: []              # J chose to come back to tags; the index lists this repo under "Needs setup" until then
 what: "Public, neutral static site for U.S. House and Senate roll-call voting, 1789-present: who votes with whom, on what, and how each vote split. Results are computed upstream; the browser only adds up the pair you pick."
-next: "Run the pipeline-and-pages workflow for the full history and confirm Pages serves the JSON gzipped. Then feature 3, blocs: signed agreement network per Congress or rolling window, Louvain, bloc movement over time, and the bloc split on the bill view, all computed upstream."
+next: "Feature 3, blocs: signed agreement network per Congress or rolling window, Louvain, bloc movement over time, and the bloc split on the bill view, all computed upstream."
 active: true          # true pulls this repo's tasks into J's queue
 public: true          # informational; each sprint day's snapshot decides publishing

@@ -2,7 +2,9 @@
 
 A public, neutral site for U.S. House and Senate roll-call voting, 1789 to the present. It answers one question: who votes with whom, on what, and how did each vote split? It's a static site on GitHub Pages. Computation happens as early as possible: the pipeline computes every per-roll-call result ahead of time, and the browser only adds up the pair a visitor picks. There's no backend, no in-browser database, no API key, and no outside loads at runtime.
 
-**Built so far:** head-to-head agreement (feature 1), agreement by topic with a Policy Agendas / CRS switch (feature 2), and the bill view (feature 4), for both chambers, plus member pages and chamber/Congress pickers.
+**Built so far:** head-to-head agreement (feature 1) with how the pair compares with every other pair in that Congress, agreement by topic with a Policy Agendas / CRS switch (feature 2), a vote-by-vote list of everything the two members both voted on (agreed / disagreed, contested only, by topic), and the bill view (feature 4), for both chambers, plus member pages and chamber/Congress pickers.
+
+**Live:** https://leftbrain847.github.io/congress/ (every Congress since 1789; opens on the newest).
 **Next:** blocs (feature 3); see `next` in `project.yml`.
 
 ## Run
@@ -56,8 +58,8 @@ CI runs both, then the fixture build end to end. The tests cover:
 - **Cutting line:** drawn as Voteview draws it, using `nominate_dim2_weight`.
 
 ## Deployed
-- Live: GitHub Pages once Pages is enabled and the pipeline workflow has run.
-- Day snapshot: `snapshots/2026-11-09 - Congress.html` (frozen at the end of 11/9 ET; never edited).
+- Live: https://leftbrain847.github.io/congress/ (deployed by the pipeline-and-pages workflow; refreshed weekly).
+- Day snapshots: `snapshots/2026-11-09 - Congress.html`, `snapshots/2026-11-10 - Congress.html` (each frozen at the end of its day, ET).
 - Current version: `current.html`, the latest self-contained build (118th Congress, both chambers). The index features it as the project's current version. Rebuild it with `python -m pipeline.snapshot_page --data build/data --out current.html --title "Congress Roll Calls" --kind current`.
 
 ## Ship a sprint day

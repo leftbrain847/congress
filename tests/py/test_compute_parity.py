@@ -26,6 +26,8 @@ def run_node(tmp_path, calls, files):
         if (kind === 'pair') return K.pairAgreement(p.congresses.map((c) => part(p.chamber, c)), p.a, p.b, p.t, p.scheme);
         if (kind === 'points') return K.points(F[`${{p.chamber}}/${{p.congress}}/members.json`], F[`${{p.chamber}}/${{p.congress}}/positions.json`], p.roll);
         if (kind === 'member_votes') return K.memberVotes(p.icpsr, F[`${{p.chamber}}/${{p.congress}}/rollcalls.json`].rows, F[`${{p.chamber}}/${{p.congress}}/positions.json`]);
+        if (kind === 'votes') return K.pairVotes(p.congresses.map((c) => part(p.chamber, c)), p.a, p.b, p.t, 'pap')
+          .map((v) => ({{ congress: v.congress, rollnumber: v.rollnumber, position_a: v.position_a, position_b: v.position_b }}));
         if (kind === 'shared') return K.sharedCongresses(F[`members/${{p.a}}.json`], F[`members/${{p.b}}.json`], p.chamber);
       }});
       process.stdout.write(JSON.stringify(out));
@@ -92,3 +94,27 @@ def test_multi_congress_sum_matches_sql(tiny2_data, tmp_path):
     for call, g, w in zip(calls, got, json.loads(json.dumps(want))):
         assert g == w, call
     assert got[0]["byCongress"][0]["shared_all"] == 5 and len(got[0]["byCongress"]) == 2
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_vote_list_matches_sql_and_totals(fixture_data, tiny2_data, tmp_path):
+    """The vote-by-vote list is exactly the SQL's shared votes, so its counts add up to the head-to-head totals."""
+    for data, scope, pairs in [(fixture_data, [("Senate", 118)], None), (tiny2_data, None, [(1, 2), (1, 3)])]:
+        files = results.build(data, scope)
+        con = queries.connect(data)
+        ch, cs = ("Senate", [118]) if scope else ("Senate", [50, 51])
+        if pairs is None:
+            ids = [m["icpsr"] for m in files["Senate/118/members.json"]]
+            pairs = [(ids[0], ids[1]), (ids[4], ids[-2])]
+        calls, want = [], []
+        for a, b in pairs:
+            calls.append(["votes", {"chamber": ch, "congresses": cs, "a": a, "b": b, "t": 0.10}])
+            want.append(queries.run(con, "h2h_votes", a, b, ch, min(cs), max(cs)))
+        sub = tmp_path / str(len(cs))
+        sub.mkdir()
+        got = run_node(sub, calls, files)
+        for call, g, w in zip(calls, got, want):
+            assert g == w, call
+            totals = queries.run(con, "h2h", call[1]["a"], call[1]["b"], ch, min(cs), max(cs), 0.10)
+            assert len(g) == sum(r["shared_all"] for r in totals)
+            assert sum(x["position_a"] == x["position_b"] for x in g) == sum(r["agree_all"] for r in totals)

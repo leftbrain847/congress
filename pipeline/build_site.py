@@ -21,6 +21,7 @@ STATIC = ["index.html", "css/app.css", "js/metrics.js", "js/compute.js", "js/dat
 
 def front_settings(cfg: dict) -> dict:
     return {
+        "site_url": cfg["output"]["site_url"],
         "analysis": cfg["analysis"],
         "scope": cfg["scope"],
         "topics": {"pap_major_topics": {str(k): v for k, v in cfg["topics"]["pap_major_topics"].items()},

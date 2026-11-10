@@ -116,3 +116,14 @@ figcaption { color: var(--muted); font-size: .88rem; }
 .topic-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
 .topic-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); }
 .topic-n { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+/* Vote-by-vote list */
+.votes .seg { margin: 6px 0; }
+.rc-d { color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rc-pos { font-size: .9rem; color: var(--muted); }
+.pos { font-weight: 600; }
+.agree-tag { display: inline-block; font-size: .75rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 2px; }
+.agree-tag.same { background: color-mix(in srgb, var(--yea) 20%, transparent); color: var(--yea); }
+.agree-tag.diff { background: color-mix(in srgb, var(--nay) 20%, transparent); color: var(--nay); }
+a.topic-name { color: var(--accent); }
+.snapshot-note { margin: 8px max(16px, env(safe-area-inset-left, 0px)) 0; }
+.snapshot-note a { font-weight: 600; }

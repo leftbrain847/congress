@@ -158,9 +158,53 @@ for (const [label, root] of [['live site', () => `${base}/`], ['day page', () =>
   });
 }
 
+test('live site: vote by vote adds up to the totals, filters, and opens a vote', async () => {
+  const a = byName(senate, 'SANDERS').icpsr, b = byName(senate, 'MURKOWSKI').icpsr;
+  const { page, check, text } = await visit(`${base}/#/h2h/Senate/118?a=${a}&b=${b}&topic=pap`);
+  const { sum } = expectedPair('Senate', 118, a, b, 'pap');
+  const list = await text('#votes');
+  // Default list: contested votes, which is exactly the headline's n and agreement.
+  assert.ok(list.includes(`${M.formatInt(sum.shared_contested)} contested votes both cast yea or nay: agreed on ${M.formatInt(sum.agree_contested)}`), list.slice(0, 300));
+  // Disagreed only: every row says Disagreed.
+  await page.click('#votes a:has-text("Disagreed (")');
+  await page.waitForFunction(() => location.hash.includes('show=disagreed') && [...document.querySelectorAll('#votes .seg a.on')].some((x) => x.textContent.startsWith('Disagreed')));
+  const tags = await page.locator('#votes .agree-tag').allTextContents();
+  assert.ok(tags.length > 0 && tags.every((t) => t === 'Disagreed'));
+  // A topic name opens its votes.
+  const topic = (await page.locator('a.topic-name').first().textContent()).trim();
+  await page.locator('a.topic-name').first().click();
+  await page.waitForFunction((tp) => (document.querySelector('#votes')?.textContent || '').includes(`Topic: ${tp}`), topic);
+  // A row opens the bill view.
+  await page.locator('#votes .rc-list a').first().click();
+  await page.waitForSelector('figure.plot-wrap');
+  await check();
+  await page.close();
+});
+
+// Every chamber and Congress in the build (or the newest E2E_SWEEP_LAST Congresses): head-to-head with the vote
+// list, roll-call list, a vote, and a member page all render with no errors.
+const manifest = read('manifest.json');
+const lastN = Number(process.env.E2E_SWEEP_LAST || 0);
+const newest = Math.max(...manifest.partitions.map((p) => p.congress));
+for (const p of manifest.partitions.filter((x) => !lastN || x.congress > newest - lastN)) {
+  test(`sweep: ${p.chamber}, Congress ${p.congress}`, async () => {
+    const members = read(`${p.chamber}/${p.congress}/members.json`);
+    const rc = read(`${p.chamber}/${p.congress}/rollcalls.json`);
+    const [a, b] = members.slice(0, 2).map((m) => m.icpsr);
+    for (const route of [`#/h2h/${p.chamber}/${p.congress}?a=${a}&b=${b}`, `#/votes/${p.chamber}/${p.congress}`,
+      `#/vote/${p.chamber}/${p.congress}/${rc.rows[0].rollnumber}`, `#/member/${a}/${p.chamber}/${p.congress}`]) {
+      const { page, check, text } = await visit(`${base}/${route}`);
+      if (route.includes('/h2h/')) assert.match(await text(), /Vote by vote|No shared yea\/nay votes/);
+      await check();
+      await page.close();
+    }
+  });
+}
+
 test('day page: a member outside the snapshot gets a clear message', async () => {
   const { page, check, text } = await visit(`${base}/day.html#/member/999999`);
   assert.match(await text(), /Not in this snapshot/);
+  assert.equal(await page.locator('a:has-text("Open this view on the full site")').count(), 1);
   await check();
   await page.close();
 });

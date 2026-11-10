@@ -20,9 +20,9 @@ scope:
   chambers: [House, Senate]
   congress_min: 1
   congress_max: 119
-  # What the front end opens on.
+  # What the front end opens on. default_congress: a Congress number, or latest (the newest one built).
   default_chamber: Senate
-  default_congress: 118
+  default_congress: latest
 
 # Voteview cast codes -> position. 1-3 yea, 4-6 nay, 7-9 present / not voting, 0 not a member (dropped).
 cast_codes:
@@ -73,6 +73,7 @@ topics:
     23: Culture
 
 output:
+  site_url: https://leftbrain847.github.io/congress/   # the full site; the self-contained pages link to it
   data_dir: build/data          # pipeline output (gitignored); the Pages workflow publishes it
   fixture_raw_dir: fixture/raw  # committed slice of the real sources for tests and local dev
   fixture_congresses: [1, 93, 118]
