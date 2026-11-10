@@ -132,6 +132,9 @@ def build(raw: Path, out: Path, cfg: dict) -> dict:
             rec["pap_majortopic"], rec["pap_subtopic"] = pap_codes.get((congress, chamber, r["rollnumber"]), (None, None))
             rollcalls.append(rec)
 
+    dupes = con.execute("SELECT count(*) FROM (SELECT 1 FROM members GROUP BY congress, chamber, icpsr HAVING count(*) > 1)").fetchone()[0]
+    if dupes:
+        raise SystemExit(f"members: {dupes} member(s) listed twice in one chamber and Congress; agreement counts would double")
     rollcalls = topics.resolve_crs(rollcalls, cfg["topics"]["crs_inherit_scope"])
     cols = ", ".join(f"{k} {t}" for k, t in ROLLCALL_FIELDS)
     con.execute(f"CREATE TABLE rollcalls ({cols})")

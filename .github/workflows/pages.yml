@@ -39,7 +39,7 @@ jobs:
           CONGRESSES: ${{ inputs.congresses }}
         run: |
           if [ -n "$CONGRESSES" ]; then
-            echo "$CONGRESSES" | grep -Eq '^[0-9 ]+$' || { echo "congresses must be numbers separated by spaces"; exit 1; }
+            [[ "$CONGRESSES" =~ ^[0-9\ ]+$ ]] || { echo "congresses must be numbers separated by spaces"; exit 1; }
             python -m pipeline.fetch --raw build/raw --congress $CONGRESSES
           else
             python -m pipeline.fetch --raw build/raw
