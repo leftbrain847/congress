@@ -78,6 +78,11 @@ for (const [label, root] of [['live site', () => `${base}/`], ['day page', () =>
     const { page, check, text } = await visit(`${root()}#/`);
     assert.match(await text(), /Head-to-head/);
     assert.equal(await page.locator('.card').count(), 3);
+    // default_congress 'latest' resolves to the newest Congress built (the day page carries only its own Congress).
+    if (label === 'live site') {
+      const newestSenate = Math.max(...read('manifest.json').partitions.filter((p) => p.chamber === 'Senate').map((p) => p.congress));
+      assert.equal(await page.locator(`.card[href="#/h2h/Senate/${newestSenate}"]`).count(), 1);
+    }
     await check();
     await page.close();
   });
@@ -170,10 +175,24 @@ test('live site: vote by vote adds up to the totals, filters, and opens a vote',
   await page.waitForFunction(() => location.hash.includes('show=disagreed') && [...document.querySelectorAll('#votes .seg a.on')].some((x) => x.textContent.startsWith('Disagreed')));
   const tags = await page.locator('#votes .agree-tag').allTextContents();
   assert.ok(tags.length > 0 && tags.every((t) => t === 'Disagreed'));
-  // A topic name opens its votes.
+  // "Show more" adds rows in place: more rows, same scroll position, no navigation.
+  const before = await page.locator('#votes .rc-list li').count();
+  if (await page.locator('#votes button.more').count()) {
+    await page.locator('#votes button.more').scrollIntoViewIfNeeded();
+    const y = await page.evaluate(() => window.scrollY), hash = await page.evaluate(() => location.hash);
+    await page.click('#votes button.more');
+    assert.ok(await page.locator('#votes .rc-list li').count() > before, 'Show more adds rows');
+    assert.equal(await page.evaluate(() => location.hash), hash);
+    assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - y) < 50, 'Show more keeps the scroll position');
+  }
+  // A topic name opens its votes, and every count follows the topic.
   const topic = (await page.locator('a.topic-name').first().textContent()).trim();
   await page.locator('a.topic-name').first().click();
   await page.waitForFunction((tp) => (document.querySelector('#votes')?.textContent || '').includes(`Topic: ${tp}`), topic);
+  const segs = await page.locator('#votes .seg a').allTextContents();
+  const num = (label) => Number(segs.find((x) => x.startsWith(label)).match(/\(([\d,]+)\)/)[1].replace(/,/g, ''));
+  assert.equal(num('Contested'), num('All ('), 'contested count follows the topic filter');
+  assert.equal(num('Agreed') + num('Disagreed'), num('All ('));
   // A row opens the bill view.
   await page.locator('#votes .rc-list a').first().click();
   await page.waitForSelector('figure.plot-wrap');

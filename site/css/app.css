@@ -127,3 +127,4 @@ figcaption { color: var(--muted); font-size: .88rem; }
 a.topic-name { color: var(--accent); }
 .snapshot-note { margin: 8px max(16px, env(safe-area-inset-left, 0px)) 0; }
 .snapshot-note a { font-weight: 600; }
+button.more { margin: 8px 0; }

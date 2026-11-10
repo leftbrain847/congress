@@ -46,6 +46,12 @@
     return { parts: path ? path.split('/').map(decodeURIComponent) : [], q: new URLSearchParams(qs || '') };
   }
 
+  // The Congress a chamber opens on: settings.scope.default_congress, or the newest built when it is 'latest' or absent.
+  function defaultCongress(chamber) {
+    const list = partitionsFor(chamber), want = Number(settings.scope.default_congress);
+    return list.includes(want) ? want : list[list.length - 1];
+  }
+
   function partitionsFor(chamber) {
     return manifest.partitions.filter((p) => p.chamber === chamber).map((p) => p.congress).sort((a, b) => a - b);
   }
@@ -86,8 +92,7 @@
 
   // ---------- Home ----------
   async function home() {
-    const ch = settings.scope.default_chamber, c = settings.scope.default_congress;
-    const okC = hasPartition(ch, c) ? c : partitionsFor(ch).slice(-1)[0];
+    const ch = settings.scope.default_chamber, okC = defaultCongress(ch);
     return [
       h('h1', {}, 'Roll-call voting in the U.S. House and Senate'),
       h('p', { class: 'lede' }, 'Who votes with whom, on what, and how each vote split. Results are computed ahead of time from Voteview roll-call records; your browser only adds up the pair you pick. Every number is shown with its definition and its count.'),
@@ -156,8 +161,8 @@
       shown.length ? h('ol', { class: 'topics' }, shown.map((r) => row(r, topicName(scheme, r.topic))),
         uncoded && uncoded.shared_contested >= minN ? row(uncoded, 'Not coded') : null)
         : h('p', { class: 'muted' }, `No topic has ${minN} or more shared contested votes for this pair.`),
-      small.length ? h('p', { class: 'muted' }, `Fewer than ${minN} shared contested votes, not shown: ` +
-        small.map((r) => `${topicName(scheme, r.topic)} (${r.shared_contested})`).join(', ') + '.') : null,
+      small.length ? h('p', { class: 'muted' }, `Fewer than ${minN} shared contested votes, not drawn: `,
+        small.flatMap((r, i) => [i ? ', ' : '', h('a', { href: topicHref(r.topic) }, `${topicName(scheme, r.topic)} (${r.shared_contested})`)]), '.') : null,
       overall != null ? h('p', { class: 'def' }, `Bars: agreement on contested votes in each topic. Marker: this pair's agreement on all contested votes (${M.formatPct(overall)}). Sorted by number of shared contested votes. Tap a topic to see its votes.`) : null,
     ];
   }
@@ -167,8 +172,9 @@
     const only = q.get('only') === 'all' ? 'all' : 'contested';
     const show = ['agreed', 'disagreed'].includes(q.get('show')) ? q.get('show') : 'all';
     const t = q.has('t') ? (q.get('t') === '_none' ? '' : q.get('t')) : null;
-    const limit = Math.max(50, Number(q.get('n')) || 50);
-    const base = votes.filter((v) => (only === 'all' || v.contested) && (t === null || v.topic === t));
+    const PAGE = 50;
+    const inTopic = votes.filter((v) => t === null || v.topic === t);
+    const base = inTopic.filter((v) => only === 'all' || v.contested);
     const agreed = base.filter((v) => v.same).length, disagreed = base.length - agreed;
     const shown = base.filter((v) => show === 'all' || (show === 'agreed') === v.same);
     const nameA = names[0] ? names[0].bioname.split(',')[0] : 'A', nameB = names[1] ? names[1].bioname.split(',')[0] : 'B';
@@ -177,22 +183,33 @@
     const pos = (p) => h('span', { class: `pos ${p === 1 ? 'pos-yea' : 'pos-nay'}` }, M.positionLabel(p));
     return h('section', { id: 'votes', class: 'votes' },
       h('h2', {}, 'Vote by vote'),
-      seg('Which votes', [[`Contested (${M.formatInt(votes.filter((v) => v.contested).length)})`, { only: 'contested', n: null }, only === 'contested'],
-        [`All shared (${M.formatInt(votes.length)})`, { only: 'all', n: null }, only === 'all']]),
-      seg('Agreed or disagreed', [[`All (${M.formatInt(base.length)})`, { show: 'all', n: null }, show === 'all'],
-        [`Agreed (${M.formatInt(agreed)})`, { show: 'agreed', n: null }, show === 'agreed'],
-        [`Disagreed (${M.formatInt(disagreed)})`, { show: 'disagreed', n: null }, show === 'disagreed']]),
-      t !== null ? h('p', {}, `Topic: ${topicName(scheme, t)} · `, h('a', { href: href({ t: null, n: null }) }, 'all topics')) : null,
+      seg('Which votes', [[`Contested (${M.formatInt(inTopic.filter((v) => v.contested).length)})`, { only: 'contested' }, only === 'contested'],
+        [`All shared (${M.formatInt(inTopic.length)})`, { only: 'all' }, only === 'all']]),
+      seg('Agreed or disagreed', [[`All (${M.formatInt(base.length)})`, { show: 'all' }, show === 'all'],
+        [`Agreed (${M.formatInt(agreed)})`, { show: 'agreed' }, show === 'agreed'],
+        [`Disagreed (${M.formatInt(disagreed)})`, { show: 'disagreed' }, show === 'disagreed']]),
+      t !== null ? h('p', {}, `Topic: ${topicName(scheme, t)} · `, h('a', { href: href({ t: null }) }, 'all topics')) : null,
       h('p', { class: 'muted' }, `${M.formatInt(base.length)} ${only === 'contested' ? 'contested ' : ''}votes both cast yea or nay${t !== null ? ' in this topic' : ''}: agreed on ${M.formatInt(agreed)}${base.length ? ` (${M.formatPct(agreed / base.length)})` : ''}, disagreed on ${M.formatInt(disagreed)}. Newest first.`),
-      shown.length ? h('ol', { class: 'rc-list' }, shown.slice(0, limit).map((v) => h('li', {},
-        h('a', { href: `#/vote/${chamber}/${v.congress}/${v.rollnumber}` },
-          h('span', { class: 'rc-top' }, `${ordinal(v.congress)} · #${v.rollnumber} · ${v.date || ''}${v.bill_number ? ' · ' + v.bill_number : ''}`),
-          h('span', { class: 'rc-q' }, v.vote_question || v.description || 'Roll call'),
-          v.description && v.vote_question ? h('span', { class: 'rc-d' }, v.description) : null,
-          h('span', { class: 'rc-pos' }, h('span', { class: `agree-tag ${v.same ? 'same' : 'diff'}` }, v.same ? 'Agreed' : 'Disagreed'),
-            ` ${nameA} `, pos(v.position_a), ` · ${nameB} `, pos(v.position_b),
-            ` · result ${v.yea_n}–${v.nay_n}${v.topic ? ' · ' + topicName(scheme, v.topic) : ''}`))))) : h('p', { class: 'muted' }, 'No votes match.'),
-      shown.length > limit ? h('p', {}, h('a', { class: 'button-link', href: href({ n: limit + 100 }) }, `Show more (${M.formatInt(shown.length - limit)} left)`)) : null);
+      (() => {
+        if (!shown.length) return h('p', { class: 'muted' }, 'No votes match.');
+        const row = (v) => h('li', {},
+          h('a', { href: `#/vote/${chamber}/${v.congress}/${v.rollnumber}` },
+            h('span', { class: 'rc-top' }, `${ordinal(v.congress)} · #${v.rollnumber} · ${v.date || ''}${v.bill_number ? ' · ' + v.bill_number : ''}`),
+            h('span', { class: 'rc-q' }, v.vote_question || v.description || 'Roll call'),
+            v.description && v.vote_question ? h('span', { class: 'rc-d' }, v.description) : null,
+            h('span', { class: 'rc-pos' }, h('span', { class: `agree-tag ${v.same ? 'same' : 'diff'}` }, v.same ? 'Agreed' : 'Disagreed'),
+              ` ${nameA} `, pos(v.position_a), ` · ${nameB} `, pos(v.position_b),
+              ` · result ${v.yea_n}–${v.nay_n}${v.topic ? ' · ' + topicName(scheme, v.topic) : ''}`)));
+        // "Show more" adds rows in place, so the reader stays where they are.
+        const list = h('ol', { class: 'rc-list' }, shown.slice(0, PAGE).map(row));
+        let count = PAGE;
+        const more = h('button', { type: 'button', class: 'more', onclick: () => {
+          list.append(...shown.slice(count, count + PAGE).map(row));
+          count += PAGE;
+          if (count >= shown.length) more.remove(); else more.textContent = `Show more (${M.formatInt(shown.length - count)} left)`;
+        } }, `Show more (${M.formatInt(shown.length - PAGE)} left)`);
+        return [list, shown.length > PAGE ? more : null];
+      })());
   }
 
   // ---------- Head-to-head ----------
@@ -447,8 +464,8 @@
       const [r, x, y, z] = parts;
       const defCh = settings.scope.default_chamber;
       const valid = (ch, c) => hasPartition(ch, Number(c));
-      if (r === 'h2h') kids = valid(x, y) ? await headToHead(x, Number(y), q) : await headToHead(defCh, partitionsFor(defCh).slice(-1)[0], q);
-      else if (r === 'votes') kids = valid(x, y) ? await rollcallList(x, Number(y), q) : await rollcallList(defCh, partitionsFor(defCh).slice(-1)[0], q);
+      if (r === 'h2h') kids = valid(x, y) ? await headToHead(x, Number(y), q) : await headToHead(defCh, defaultCongress(defCh), q);
+      else if (r === 'votes') kids = valid(x, y) ? await rollcallList(x, Number(y), q) : await rollcallList(defCh, defaultCongress(defCh), q);
       else if (r === 'vote' && valid(x, y)) kids = await billView(x, Number(y), Number(z));
       else if (r === 'member' && x) kids = await memberPage(Number(x), y, y ? Number(z) : null);
       else if (r === 'about') kids = await about();
@@ -462,7 +479,7 @@
         link('#/', 'Back to the start'));
       if (!(e && e.code === 'not_in_snapshot')) console.warn(e);
     }
-    const target = location.hash.includes('focus=votes') && document.getElementById('votes');
+    const target = parseHash().q.get('focus') === 'votes' && document.getElementById('votes');
     if (target) target.scrollIntoView(); else window.scrollTo(0, 0);
   }
 
