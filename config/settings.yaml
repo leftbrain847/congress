@@ -10,6 +10,9 @@ analysis:
   # Blocs (not built yet): rolling window in Congresses, and Louvain resolution.
   rolling_window_congresses: 3
   clustering_resolution: 1.0
+  # DW-NOMINATE second-dimension weight, used to draw the cutting line exactly as Voteview does
+  # (nomDWeight on voteview.com roll-call pages, checked 2026-11-09).
+  nominate_dim2_weight: 0.4158127
   # Topic scheme shown by default: "pap" (Policy Agendas, 1945-2024) or "crs" (CRS policy area, 1973+).
   topic_scheme: pap
 

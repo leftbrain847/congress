@@ -1,0 +1,68 @@
+# Full data pipeline + site deploy to GitHub Pages. Manual run, and weekly.
+# Fetches Voteview and Policy Agendas data (the dev sandbox may not reach them), builds parquet for every Congress,
+# runs the tests, and publishes build/site. Nothing generated is committed.
+name: pipeline-and-pages
+on:
+  workflow_dispatch:
+    inputs:
+      congresses:
+        description: "Space-separated Congress numbers to fetch (blank = every Congress in config/settings.yaml)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 7 * * 1"   # Mondays 07:17 UTC
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: |
+          pip install -q -r requirements.txt
+          npm ci
+      - name: Tests (fixture)
+        run: pytest -q && npm test
+      - name: Fetch sources
+        env:
+          CONGRESSES: ${{ inputs.congresses }}
+        run: |
+          if [ -n "$CONGRESSES" ]; then
+            echo "$CONGRESSES" | grep -Eq '^[0-9 ]+$' || { echo "congresses must be numbers separated by spaces"; exit 1; }
+            python -m pipeline.fetch --raw build/raw --congress $CONGRESSES
+          else
+            python -m pipeline.fetch --raw build/raw
+          fi
+      - name: Build data and site
+        run: |
+          python -m pipeline.build --raw build/raw --out build/data
+          python -m pipeline.build_site --data build/data --out build/site
+          python -c "import json; c=json.load(open('build/data/coverage.json')); print('missing partitions:', c['missing_partitions']); print('PAP parse:', c['pap_parse'])"
+          du -sh build/site build/site/data
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

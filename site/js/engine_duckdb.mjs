@@ -30,8 +30,13 @@ export async function createEngine() {
   const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
   await db.instantiate(bundle.mainModule);
   const conn = await db.connect();
-  // Never fetch extensions from the network; parquet is built into the bundle.
-  await conn.query('SET autoinstall_known_extensions = false; SET autoload_known_extensions = false;');
+  // Parquet is an extension in DuckDB-WASM. Load it from this site (vendor/extensions, hash-pinned at build time),
+  // never from extensions.duckdb.org, and never auto-load anything else.
+  await conn.query('SET autoinstall_known_extensions = false');
+  await conn.query('SET autoload_known_extensions = false');
+  await conn.query(`SET custom_extension_repository = '${url('vendor/extensions').replace(/'/g, "''")}'`);
+  await conn.query('INSTALL parquet');
+  await conn.query('LOAD parquet');
 
   const manifest = await fetchJson('data/manifest.json');
   const loaded = new Set();
@@ -70,7 +75,7 @@ export async function createEngine() {
 
   return {
     manifest: async () => manifest,
-    coverage: async () => fetchJson(manifest.coverage),
+    coverage: async () => fetchJson(`data/${manifest.coverage}`),
     query: (name, params, needs = []) => serial(async () => {
       if (!(name in SQL)) throw new Error(`unknown query ${name}`);
       await ensure(needs);

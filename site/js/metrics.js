@@ -26,14 +26,17 @@
     return n == null ? '—' : Number(n).toLocaleString('en-US');
   }
 
-  // NOMINATE cutting line: points p with (p - mid) · spread = 0, clipped to the unit circle.
-  // Returns [[x1, y1], [x2, y2]] or null when Voteview has no estimate or the line misses the circle.
-  function cuttingLine(mid1, mid2, spread1, spread2) {
+  // NOMINATE cutting line, as Voteview draws it (static/js/nominateHeatMap.js): the points where a member is
+  // indifferent between the yea and nay outcomes, (x1 - m1)·s1 + w²·(x2 - m2)·s2 = 0, with w the second-dimension
+  // weight. Clipped to the unit circle. Returns [[x1, y1], [x2, y2]] or null when Voteview has no estimate or the line
+  // misses the circle.
+  function cuttingLine(mid1, mid2, spread1, spread2, dim2Weight = 1) {
     const vals = [mid1, mid2, spread1, spread2];
     if (vals.some((v) => v == null || !Number.isFinite(Number(v)))) return null;
     const [mx, my, sx, sy] = vals.map(Number);
     if (sx === 0 && sy === 0) return null;
-    const dx = -sy, dy = sx; // direction along the line
+    const w2 = Number(dim2Weight) ** 2;
+    const dx = -w2 * sy, dy = sx; // direction along the line: perpendicular to the normal (sx, w² sy)
     const a = dx * dx + dy * dy, b = 2 * (mx * dx + my * dy), c = mx * mx + my * my - 1;
     const disc = b * b - 4 * a * c;
     if (disc <= 0) return null;

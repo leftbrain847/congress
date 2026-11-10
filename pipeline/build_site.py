@@ -4,7 +4,8 @@
 
 - settings.json   front-end mirror of config/settings.yaml (analysis, scope, topic labels)
 - js/engine.bundle.mjs  site/js/engine_duckdb.mjs + DuckDB-WASM's JS API + Arrow, bundled by esbuild
-- vendor/         DuckDB-WASM workers and wasm, copied from node_modules and checked against config/vendor.lock.json
+- vendor/         DuckDB-WASM workers and wasm (from node_modules) and its parquet extension (downloaded once from
+                  extensions.duckdb.org), each checked against the sha256 in config/vendor.lock.json
 - data/           the pipeline output (manifest.json lists every file the page may load)
 Nothing is loaded from another origin at runtime.
 """
@@ -14,6 +15,7 @@ import json
 import shutil
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 from . import settings as settings_mod
@@ -21,6 +23,7 @@ from .queries import SQL_DIR
 from .settings import ROOT
 
 VENDOR_LOCK = ROOT / "config" / "vendor.lock.json"
+EXT_CACHE = ROOT / "build" / "cache" / "extensions"
 DUCKDB_DIST = ROOT / "node_modules" / "@duckdb" / "duckdb-wasm" / "dist"
 STATIC = ["index.html", "css/app.css", "js/metrics.js", "js/app.js"]
 
@@ -59,8 +62,23 @@ def copy_vendor(out: Path, update_lock: bool = False) -> dict:
         if not update_lock and got[name] != lock["files"][name]:
             raise SystemExit(f"{name}: sha256 {got[name]} does not match config/vendor.lock.json; refusing to ship it")
         shutil.copyfile(src, out / "vendor" / name)
+    ext_got = {}
+    for rel in lock.get("extensions", {}):
+        cached = EXT_CACHE / rel
+        if not cached.exists():
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            req = urllib.request.Request(f"{lock['extension_source']}/{rel}", headers={"User-Agent": "congress-build"})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                cached.write_bytes(r.read())
+        ext_got[rel] = sha256(cached)
+        if not update_lock and ext_got[rel] != lock["extensions"][rel]:
+            cached.unlink()
+            raise SystemExit(f"{rel}: sha256 {ext_got[rel]} does not match config/vendor.lock.json; refusing to ship it")
+        dest = out / "vendor" / "extensions" / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(cached, dest)
     if update_lock:
-        lock["files"] = got
+        lock["files"], lock["extensions"] = got, ext_got
         VENDOR_LOCK.write_text(json.dumps(lock, indent=1) + "\n")
     return got
 

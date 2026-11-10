@@ -37,6 +37,7 @@
     return `${m.bioname} (${partyShort(m.party)}, ${where || '—'})`;
   }
   const link = (href, text, cls) => h('a', { href, class: cls }, text);
+  const table = (...kids) => h('div', { class: 'table-wrap' }, h('table', { class: 'grid' }, ...kids));
 
   function parseHash() {
     const raw = location.hash.replace(/^#\/?/, '');
@@ -148,7 +149,7 @@
         stat('Agreement on all shared votes', sum.pct_all, sum.shared_all, sum.all_shown,
           'The same measure over every shared roll call, including near-unanimous ones. Shown for comparison: lopsided votes push every pair toward agreement.')),
       missing.length ? notice(`Not loaded in this build: ${missing.map(ordinal).join(', ')} Congress. Totals cover only the Congresses listed below.`) : null,
-      used.length ? h('table', { class: 'grid' },
+      used.length ? table(
         h('thead', {}, h('tr', {}, h('th', {}, 'Congress'), h('th', {}, 'Contested'), h('th', {}, 'n'), h('th', {}, 'All'), h('th', {}, 'n'))),
         h('tbody', {}, used.map((r) => {
           const one = M.summarizeH2h([r], minN);
@@ -198,7 +199,7 @@
     const pts = points.filter((p) => p.nominate_dim1 != null && p.nominate_dim2 != null);
     if (!pts.length) return null;
     const S = 300, pad = 12, sc = (v) => pad + ((v + 1) / 2) * (S - 2 * pad), sy = (v) => pad + ((1 - v) / 2) * (S - 2 * pad);
-    const line = M.cuttingLine(rc.nominate_mid_1, rc.nominate_mid_2, rc.nominate_spread_1, rc.nominate_spread_2);
+    const line = M.cuttingLine(rc.nominate_mid_1, rc.nominate_mid_2, rc.nominate_spread_1, rc.nominate_spread_2, settings.analysis.nominate_dim2_weight);
     const svg = s('svg', { viewBox: `0 0 ${S} ${S}`, class: 'plot', role: 'img', 'aria-label': 'Members by NOMINATE position, marked by vote' },
       s('circle', { cx: S / 2, cy: S / 2, r: (S - 2 * pad) / 2, class: 'plot-frame' }),
       s('line', { x1: pad, y1: S / 2, x2: S - pad, y2: S / 2, class: 'plot-axis' }),
@@ -234,7 +235,7 @@
           h('div', { class: 'stat-n' }, `${rc.not_voting_n} present / not voting`),
           definition(`Counted from members' recorded votes. Smaller side: ${M.formatPct(rc.minority_share)} of yea and nay votes, so this roll call is ${contested ? '' : 'not '}contested at the ${M.formatPct(t, 0)} threshold.`))),
       h('h2', {}, 'By party'),
-      h('table', { class: 'grid' },
+      table(
         h('thead', {}, h('tr', {}, h('th', {}, 'Party'), h('th', {}, 'Yea'), h('th', {}, 'Nay'), h('th', {}, 'Not voting'), h('th', { class: 'barcol' }, ''))),
         h('tbody', {}, split.map((r) => h('tr', {}, h('td', {}, r.party), h('td', {}, r.yea), h('td', {}, r.nay), h('td', {}, r.not_voting),
           h('td', { class: 'barcol' }, h('span', { class: 'bar' },
@@ -257,7 +258,7 @@
     const last = rows[rows.length - 1];
     const out = [h('h1', {}, last.bioname),
       h('p', { class: 'muted' }, [last.born ? `Born ${last.born}` : null, last.died ? `died ${last.died}` : null, last.bioguide_id ? `Bioguide ID ${last.bioguide_id}` : null].filter(Boolean).join(' · ')),
-      h('table', { class: 'grid' },
+      table(
         h('thead', {}, h('tr', {}, h('th', {}, 'Congress'), h('th', {}, 'Chamber'), h('th', {}, 'Party'), h('th', {}, 'State'), h('th', {}, 'NOMINATE 1'), h('th', {}, 'Links'))),
         h('tbody', {}, rows.map((r) => h('tr', {}, h('td', {}, ordinal(r.congress)), h('td', {}, r.chamber), h('td', {}, partyShort(r.party)),
           h('td', {}, `${r.state_abbrev}${r.chamber === 'House' && r.district_code ? '-' + r.district_code : ''}`),
@@ -299,7 +300,7 @@
         h('li', {}, 'Policy Agendas Project roll-call topic codes (comparativeagendas.net, 79th–118th Congress), joined on Congress, chamber and roll number.'),
         h('li', {}, 'CRS policy area: amendment and procedural votes with no tag take the area of their bill (same bill number, same Congress).')),
       cov ? h('h2', {}, 'Topic coverage') : null,
-      cov ? h('table', { class: 'grid' },
+      cov ? table(
         h('thead', {}, h('tr', {}, h('th', {}, 'Chamber'), h('th', {}, 'Congress'), h('th', {}, 'Roll calls'), h('th', {}, 'CRS untagged'), h('th', {}, 'PAP untagged'))),
         h('tbody', {}, cov.crs_and_pap_by_partition.map((r) => h('tr', {}, h('td', {}, r.chamber), h('td', {}, ordinal(r.congress)), h('td', {}, M.formatInt(r.rollcalls)),
           h('td', {}, M.formatPct(r.crs_untagged_share)), h('td', {}, M.formatPct(r.pap_untagged_share)))))) : null,

@@ -1,22 +1,30 @@
-# Runs whatever tests the repo has, from a clean checkout. Add a runner below if you use another stack.
+# Tests and an end-to-end build from a clean checkout against the committed fixture (fixture/raw).
 name: ci
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Node tests
-        if: hashFiles('package.json') != ''
-        run: npm ci || npm install; npm test --if-present
-      - name: Plain JS tests
-        if: hashFiles('package.json') == '' && hashFiles('**/*.test.js', '**/*.test.mjs') != ''
-        run: node --test
-      - name: Python tests
-        if: hashFiles('tests/**/*.py', 'pyproject.toml', 'requirements*.txt') != ''
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
         run: |
-          pip install -q pytest
-          [ -f requirements.txt ] && pip install -q -r requirements.txt || true
-          [ -f pyproject.toml ] && pip install -q -e . || true
-          pytest -q
+          pip install -q -r requirements.txt
+          npm ci
+      - name: Node tests
+        run: npm test
+      - name: Python tests
+        run: pytest -q
+      - name: End to end on the fixture (pipeline -> site -> day page)
+        run: |
+          python -m pipeline.build --raw fixture/raw --out build/data
+          python -m pipeline.build_site --data build/data --out build/site
+          python -m pipeline.snapshot_page --data build/data --out build/day.html
