@@ -12,8 +12,8 @@ import '../../site/js/metrics.js';
 import '../../site/js/compute.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const SITE = path.join(ROOT, 'build/site');
-const DAY = path.join(ROOT, 'build/day.html');
+const SITE = path.resolve(ROOT, process.env.E2E_SITE || 'build/site');
+const DAY = path.resolve(ROOT, process.env.E2E_DAY || 'build/day.html');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const M = globalThis.CG.metrics, K = globalThis.CG.compute;
 const read = (rel) => JSON.parse(fs.readFileSync(path.join(SITE, 'results', rel), 'utf8'));
@@ -94,12 +94,11 @@ for (const [label, root] of [['live site', () => `${base}/`], ['day page', () =>
     const shownTopics = res.byTopic.filter((r) => r.topic !== '' && r.shared_contested >= settings.analysis.min_shared_votes);
     assert.equal(await page.locator('.topic').count(), shownTopics.length + (res.byTopic.some((r) => r.topic === '' && r.shared_contested >= settings.analysis.min_shared_votes) ? 1 : 0));
     // Switch scheme, then swap the members: same totals, CRS topics.
+    // Wait for the new content itself: the old view stays on screen until the re-render finishes.
     await page.click('text=CRS policy areas');
-    await page.waitForFunction(() => location.hash.includes('topic=crs') && document.querySelector('.topics, .result'));
-    assert.match(await text('.result'), /Congressional Research Service/);
+    await page.waitForFunction(() => /Congressional Research Service/.test(document.querySelector('.result')?.textContent || ''));
     await page.click('button:has-text("Swap")');
-    await page.waitForFunction((x) => location.hash.includes(`a=${x}`), b);
-    await page.waitForSelector('.result');
+    await page.waitForFunction(() => /^MURKOWSKI.* and SANDERS/.test(document.querySelector('.result h2')?.textContent || ''));
     assert.ok((await text('.result')).includes(M.formatPct(sum.pct_contested)), 'swap keeps the same agreement');
     await check();
     await page.close();
@@ -110,7 +109,7 @@ for (const [label, root] of [['live site', () => `${base}/`], ['day page', () =>
     const { page, check, text } = await visit(`${root()}#/h2h/House/118?a=${a}`);
     assert.match(await text(), /Pick two members/);
     await page.locator('select').nth(3).selectOption(String(b));
-    await page.waitForSelector('.result');
+    await page.waitForFunction(() => /PELOSI.* and BACON/.test(document.querySelector('.result h2')?.textContent || ''));
     const { sum } = expectedPair('House', 118, a, b, settings.analysis.topic_scheme);
     assert.ok((await text('.result')).includes(M.formatPct(sum.pct_contested)));
     await check();

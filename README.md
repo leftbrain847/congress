@@ -57,7 +57,8 @@ CI runs both, then the fixture build end to end. The tests cover:
 
 ## Deployed
 - Live: GitHub Pages once Pages is enabled and the pipeline workflow has run.
-- Day snapshot: `snapshots/2026-11-09 - Congress.html`. It holds the final 11/9 sprint build: work queued before midnight counts for that day under the sprint rule.
+- Day snapshot: `snapshots/2026-11-09 - Congress.html` (frozen at the end of 11/9 ET; never edited).
+- Current version: `current.html`, the latest self-contained build (118th Congress, both chambers). The index features it as the project's current version. Rebuild it with `python -m pipeline.snapshot_page --data build/data --out current.html --title "Congress Roll Calls" --kind current`.
 
 ## Ship a sprint day
 Build the day page, then freeze it:

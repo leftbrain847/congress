@@ -1,6 +1,6 @@
 -- How agreement on contested votes is spread across every pair of members in one chamber and Congress, for the
--- head-to-head context strip. Pairs with fewer than $2 shared contested votes are left out. Groups: all pairs,
--- pairs from the same party, pairs from different parties. Runs on a one-partition connection.
+-- head-to-head context strip. Pairs with fewer than $2 shared contested votes are left out. Groups: pairs from the
+-- same party and pairs from different parties. Runs on a one-partition connection.
 -- $1 contested_threshold, $2 min_shared_votes
 WITH pairs AS (
   SELECT a.chamber, a.congress, a.icpsr AS ia, b.icpsr AS ib,
@@ -18,14 +18,10 @@ WITH pairs AS (
   JOIN members ma ON ma.icpsr = p.ia AND ma.congress = p.congress AND ma.chamber = p.chamber
   JOIN members mb ON mb.icpsr = p.ib AND mb.congress = p.congress AND mb.chamber = p.chamber
   WHERE p.n >= $2
-), grouped AS (
-  SELECT grp, pct FROM labeled
-  UNION ALL
-  SELECT 'all_pairs' AS grp, pct FROM labeled
 )
 SELECT grp, count(*) AS pairs,
        quantile_cont(pct, 0.10) AS p10, quantile_cont(pct, 0.25) AS p25, quantile_cont(pct, 0.50) AS p50,
        quantile_cont(pct, 0.75) AS p75, quantile_cont(pct, 0.90) AS p90
-FROM grouped
+FROM labeled
 GROUP BY grp
 ORDER BY grp

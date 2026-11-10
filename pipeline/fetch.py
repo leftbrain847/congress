@@ -61,7 +61,7 @@ def main(argv=None) -> int:
     ap.add_argument("--workers", type=int, default=4)
     args = ap.parse_args(argv)
     raw = Path(args.raw)
-    congresses = args.congress or list(range(cfg["scope"]["congress_min"], cfg["scope"]["congress_max"] + 1))
+    congresses = sorted(set(args.congress)) if args.congress else list(range(cfg["scope"]["congress_min"], cfg["scope"]["congress_max"] + 1))
     jobs = plan(cfg, raw, congresses)
     for _, dest in jobs:
         dest.parent.mkdir(parents=True, exist_ok=True)

@@ -42,7 +42,8 @@ jobs:
         run: |
           if [ -n "$CONGRESSES" ]; then
             [[ "$CONGRESSES" =~ ^[0-9\ ]+$ ]] || { echo "congresses must be numbers separated by spaces"; exit 1; }
-            python -m pipeline.fetch --raw build/raw --congress $CONGRESSES
+            # The 118th is always included: the day page and the browser tests use it.
+            python -m pipeline.fetch --raw build/raw --congress $CONGRESSES 118
           else
             python -m pipeline.fetch --raw build/raw
           fi

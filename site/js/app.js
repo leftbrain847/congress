@@ -100,12 +100,19 @@
   }
 
   // Where this pair's contested agreement sits among every pair in the same chamber and Congress (context.json).
+  // Which percentiles of the group a value sits at or between. Quantiles can tie (small or lopsided Congresses), so
+  // the wording names the whole span of percentiles the value matches.
   function percentileBand(g, v) {
     const cuts = [[g.p10, 10], [g.p25, 25], [g.p50, 50], [g.p75, 75], [g.p90, 90]];
-    if (v < g.p10) return 'below the 10th percentile';
-    if (v >= g.p90) return 'at or above the 90th percentile';
-    for (let i = 0; i < cuts.length - 1; i++) if (v >= cuts[i][0] && v < cuts[i + 1][0]) return `between the ${ordinal(cuts[i][1])} and ${ordinal(cuts[i + 1][1])} percentiles`;
-    return '';
+    const x = Math.round(v * 10000) / 10000;
+    if (x < g.p10) return 'below the 10th percentile';
+    if (x > g.p90) return 'above the 90th percentile';
+    const atOrBelow = cuts.filter(([q]) => q <= x).map(([, p]) => p);
+    const atOrAbove = cuts.filter(([q]) => q >= x).map(([, p]) => p);
+    const lo = Math.max(...atOrBelow), hi = Math.min(...atOrAbove);
+    if (hi === lo) return `at the ${ordinal(lo)} percentile`;
+    if (hi < lo) return `at the ${ordinal(hi)} to ${ordinal(lo)} percentile`;
+    return `between the ${ordinal(lo)} and ${ordinal(hi)} percentiles`;
   }
 
   function contextStrip(ctx, value, chamber, congress, sameParty) {
@@ -195,6 +202,8 @@
     const res = K.pairAgreement(parts, a, b, t, scheme);
     const used = res.byCongress;
     const ctx = hasPartition(chamber, congress) ? await data.context(chamber, congress) : null;
+    const cov = (await data.coverage()).crs_and_pap_by_partition.find((r) => r.chamber === chamber && r.congress === congress);
+    const untagged = cov ? (scheme === 'pap' ? cov.pap_untagged_share : cov.crs_untagged_share) : null;
     const here = used.find((r) => r.congress === congress);
     const hereShown = here && here.shared_contested >= minN;
     const sum = M.summarizeH2h(used, minN);
@@ -229,7 +238,10 @@
         h('a', { href: route(a, b, scope, 'crs'), class: scheme === 'crs' ? 'on' : '' }, 'CRS policy areas')),
       definition(scheme === 'pap'
         ? 'Policy Agendas Project major topic of each roll call (coded for the 79th–118th Congresses, 1945–2024).'
-        : 'Congressional Research Service policy area of the bill (93rd Congress, 1973, onward). Amendments and procedural votes take their bill\'s area.'),
+        : 'Congressional Research Service policy area of the bill, as recorded by Voteview (from the 93rd Congress, 1973, with gaps). Amendments and procedural votes take their bill\'s area.'),
+      untagged != null ? h('p', { class: untagged >= 0.5 ? 'notice' : 'muted' },
+        `${M.formatPct(untagged, 0)} of roll calls in the ${ordinal(congress)} Congress ${chamber} have no ${scheme === 'pap' ? 'Policy Agendas topic' : 'CRS policy area'}; they are counted under "Not coded".` +
+        (untagged >= 0.5 ? ` Try the ${scheme === 'pap' ? 'CRS' : 'Policy Agendas'} scheme.` : '')) : null,
       res.byTopic.length ? topicRows(res.byTopic, scheme, minN, sum.contested_shown ? sum.pct_contested : null) : h('p', { class: 'muted' }, 'No shared votes to split.'),
       h('p', {}, link(`#/member/${a}`, `${names[0] ? names[0].bioname : a}: member page`), ' · ', link(`#/member/${b}`, `${names[1] ? names[1].bioname : b}: member page`))));
     return out;
