@@ -1,0 +1,10 @@
+{
+ "$comment": "sha256 of every DuckDB-WASM file the site serves. build_site refuses to ship a file that differs. Upgrade: change the version in package.json, npm install, then python -m pipeline.build_site --update-vendor-lock and review the diff.",
+ "package": "@duckdb/duckdb-wasm@1.32.0",
+ "files": {
+  "duckdb-eh.wasm": "4c221bfa59c11f24dbd750e70c90b9252eca6eec5633936e6a2ec766e55fd879",
+  "duckdb-browser-eh.worker.js": "f8ab72b6b90b3ad83077d47426d4a99d5d9a4c7e07cba1a2be37d655adc7c1ab",
+  "duckdb-mvp.wasm": "45d72a81fba8e57693d890da837c7041310e385e75619a8559839b15388dfe97",
+  "duckdb-browser-mvp.worker.js": "b0387027f174e2b60c2d5cfa31cecca9b89d8a9762346b6449a784cd1c4dde3c"
+ }
+}

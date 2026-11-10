@@ -1,0 +1,75 @@
+# Every tunable for congress lives here. The pipeline reads this file; scripts/build_site.mjs mirrors it into
+# site/settings.json for the front end. Change a value here, never in code.
+
+analysis:
+  # A roll call is "contested" when its smaller side (yea or nay, among members voting yea/nay) is at least this
+  # share of those votes. 0.10 = at least 10%.
+  contested_threshold: 0.10
+  # Results built on fewer shared votes than this are hidden (head-to-head, topic cells).
+  min_shared_votes: 20
+  # Blocs (not built yet): rolling window in Congresses, and Louvain resolution.
+  rolling_window_congresses: 3
+  clustering_resolution: 1.0
+  # Topic scheme shown by default: "pap" (Policy Agendas, 1945-2024) or "crs" (CRS policy area, 1973+).
+  topic_scheme: pap
+
+scope:
+  chambers: [House, Senate]
+  congress_min: 1
+  congress_max: 119
+  # What the front end opens on.
+  default_chamber: Senate
+  default_congress: 118
+
+# Voteview cast codes -> position. 1-3 yea, 4-6 nay, 7-9 present / not voting, 0 not a member (dropped).
+cast_codes:
+  yea: [1, 2, 3]
+  nay: [4, 5, 6]
+  not_voting: [7, 8, 9]
+
+sources:
+  voteview_base: https://voteview.com/static/data/out
+  # Per-Congress files: {base}/{table}/{H|S}{congress:03d}_{table}.{ext}
+  voteview_tables:
+    votes: csv
+    members: csv
+    rollcalls: json   # the JSON export carries crs_policy_area; the CSV does not
+  voteview_parties: parties/HSall_parties.csv
+  pap_rollcalls: https://minio.la.utexas.edu/compagendas/datasetfiles/rcv_voteview_v3_4.csv
+  pap_encoding: cp1252
+  request_timeout_s: 120
+  request_pause_s: 0.5
+  user_agent: congress-pipeline (public research; github.com/leftbrain847/congress)
+
+topics:
+  # Untagged votes inherit their bill's CRS policy area when the bill has a tagged vote in the same Congress.
+  # "congress" joins on (congress, bill_number) across both chambers; "chamber" also requires the same chamber.
+  crs_inherit_scope: congress
+  # Policy Agendas major topic codes (PAP codebook 2019).
+  pap_major_topics:
+    1: Macroeconomics
+    2: Civil Rights
+    3: Health
+    4: Agriculture
+    5: Labor
+    6: Education
+    7: Environment
+    8: Energy
+    9: Immigration
+    10: Transportation
+    12: Law and Crime
+    13: Social Welfare
+    14: Housing
+    15: Domestic Commerce
+    16: Defense
+    17: Technology
+    18: Foreign Trade
+    19: International Affairs
+    20: Government Operations
+    21: Public Lands
+    23: Culture
+
+output:
+  data_dir: build/data          # pipeline output (gitignored); the Pages workflow publishes it
+  fixture_raw_dir: fixture/raw  # committed slice of the real sources for tests and local dev
+  fixture_congresses: [1, 93, 118]

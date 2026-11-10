@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Congress Roll Calls</title>
+<meta name="description" content="Who votes with whom in the U.S. House and Senate, on what, and how each roll call split. 1789 to present, computed in your browser.">
+<!-- Content-Security-Policy: everything is self-hosted; wasm needs wasm-unsafe-eval, workers come from this origin. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">Congress roll calls</a>
+  <nav aria-label="Sections">
+    <a href="#/h2h">Head-to-head</a>
+    <a href="#/votes">Roll calls</a>
+    <a href="#/about">About</a>
+  </nav>
+</header>
+<main id="app" aria-live="polite"><p class="loading">Starting the in-browser database…</p></main>
+<footer class="foot">Data: Voteview and the Policy Agendas Project. Computed in your browser; nothing is sent anywhere.</footer>
+<script src="js/metrics.js"></script>
+<script src="js/app.js"></script>
+<script type="module" src="js/engine.bundle.mjs"></script>
+</body>
+</html>

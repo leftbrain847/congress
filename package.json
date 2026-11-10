@@ -1,0 +1,13 @@
+{
+  "name": "congress",
+  "private": true,
+  "type": "module",
+  "description": "Static site for U.S. House and Senate roll-call voting; DuckDB-WASM runs every query in the browser.",
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "@duckdb/duckdb-wasm": "1.32.0",
+    "esbuild": "0.28.2"
+  }
+}
