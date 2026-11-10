@@ -40,6 +40,26 @@
     return { byCongress, byTopic: topics };
   }
 
+  // Every roll call both members voted yea or nay on (h2h_votes.sql), newest first, with the fields the list shows.
+  function pairVotes(parts, a, b, threshold, scheme) {
+    const out = [];
+    for (const { congress, rows, positions } of parts) {
+      const ia = positions.order.indexOf(a), ib = positions.order.indexOf(b);
+      if (ia < 0 || ib < 0) continue;
+      for (const r of rows) {
+        const s = positions.by_roll[String(r.rollnumber)];
+        if (!s) continue;
+        const pa = POS[s[ia]], pb = POS[s[ib]];
+        if (!pa || !pb) continue;
+        out.push({ congress, rollnumber: r.rollnumber, date: r.date, bill_number: r.bill_number,
+          vote_question: r.vote_question, description: r.description, topic: topicOf(r, scheme),
+          position_a: pa, position_b: pb, same: pa === pb,
+          contested: r.minority_share != null && r.minority_share >= threshold, yea_n: r.yea_n, nay_n: r.nay_n });
+      }
+    }
+    return out.sort((x, y) => y.congress - x.congress || y.rollnumber - x.rollnumber);
+  }
+
   function sharedCongresses(rowsA, rowsB, chamber) {
     const inB = new Set(rowsB.filter((r) => r.chamber === chamber).map((r) => r.congress));
     return [...new Set(rowsA.filter((r) => r.chamber === chamber && inB.has(r.congress)).map((r) => r.congress))].sort((x, y) => x - y);
@@ -73,5 +93,5 @@
     return out;
   }
 
-  CG.compute = { pairAgreement, sharedCongresses, points, memberVotes, topicOf };
+  CG.compute = { pairAgreement, pairVotes, sharedCongresses, points, memberVotes, topicOf };
 })(globalThis);
