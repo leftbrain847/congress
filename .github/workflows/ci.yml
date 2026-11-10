@@ -31,3 +31,5 @@ jobs:
           python -m pipeline.snapshot_page --data build/data --out build/day.html
       - name: Browser tests (site and day page, as a visitor at phone width)
         run: npm run e2e
+      - name: Browser tests again with slow responses (catches tests that read a page before it re-renders)
+        run: E2E_DELAY_MS=600 npm run e2e

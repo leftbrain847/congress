@@ -19,6 +19,8 @@ const M = globalThis.CG.metrics, K = globalThis.CG.compute;
 const read = (rel) => JSON.parse(fs.readFileSync(path.join(SITE, 'results', rel), 'utf8'));
 const settings = JSON.parse(fs.readFileSync(path.join(SITE, 'settings.json'), 'utf8'));
 
+// E2E_DELAY_MS slows every response, to flush out tests that read the page before it re-renders.
+const DELAY = Number(process.env.E2E_DELAY_MS || 0);
 let server, base, browser;
 
 before(async () => {
@@ -28,11 +30,11 @@ before(async () => {
     if (p === '/') p = '/index.html';
     const f = p === '/day.html' ? DAY : path.join(SITE, path.normalize(p));
     if (!f.startsWith(SITE) && f !== DAY) { res.writeHead(403); return res.end(); }
-    fs.readFile(f, (err, buf) => {
+    fs.readFile(f, (err, buf) => setTimeout(() => {
       if (err) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream' });
       res.end(buf);
-    });
+    }, DELAY));
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -120,14 +122,13 @@ for (const [label, root] of [['live site', () => `${base}/`], ['day page', () =>
     const rc = read('Senate/118/rollcalls.json');
     const { page, check, text } = await visit(`${root()}#/votes/Senate/118`);
     assert.match(await text(), new RegExp(`${M.formatInt(rc.rows.length)} of ${M.formatInt(rc.rows.length)} roll calls`));
+    const want = rc.rows.filter((r) => [r.bill_number, r.vote_question, r.description, r.crs_policy_area_resolved].join(' ').toLowerCase().includes('nomination')).length;
     await page.fill('input[type=search]', 'nomination');
     await page.click('button:has-text("Filter")');
-    await page.waitForFunction(() => location.hash.includes('q=nomination'));
-    await page.waitForSelector('.rc-list');
-    const want = rc.rows.filter((r) => [r.bill_number, r.vote_question, r.description, r.crs_policy_area_resolved].join(' ').toLowerCase().includes('nomination')).length;
-    assert.match(await text(), new RegExp(`${M.formatInt(want)} of`));
+    // Wait for the filtered count itself: the unfiltered list stays on screen until the re-render finishes.
+    await page.waitForFunction((n) => (document.querySelector('main')?.textContent || '').includes(`${n} of`), M.formatInt(want));
     await page.locator('.rc-list a').first().click();
-    await page.waitForSelector('figure.plot-wrap');
+    await page.waitForSelector('figure.plot-wrap');   // only the vote view has this figure, so no stale match
     const roll = Number((await page.evaluate(() => location.hash)).split('/').pop());
     const crossers = rc.crossers[String(roll)];
     assert.match(await text(), new RegExp(`Voted against their party's majority \\(${crossers.length}\\)`));
